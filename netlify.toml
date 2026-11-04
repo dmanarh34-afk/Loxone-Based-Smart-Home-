@@ -3,3 +3,7 @@
   base = "frontend"
   command = "npm run build"
   publish = ".next"
+
+# Converts the Next.js build into something Netlify can serve
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
