@@ -1,0 +1,1166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Home Simulation - Plot 1 Glenshire Hills</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- Three.js and OrbitControls -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #0f172a;
+            color: #f8fafc;
+            user-select: none;
+        }
+
+        /* Glassmorphism Styles */
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.75);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.3);
+        }
+
+        .glass-card {
+            background: rgba(30, 41, 59, 0.6);
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        /* Custom Scrollbars */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(15, 23, 42, 0.5);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(100, 116, 139, 0.5);
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(148, 163, 184, 0.8);
+        }
+
+        /* Toggle Switches */
+        .toggle-checkbox:checked {
+            right: 0;
+            border-color: #3b82f6;
+        }
+        .toggle-checkbox:checked + .toggle-label {
+            background-color: #3b82f6;
+        }
+
+        /* Alarm Pulse Animation */
+        @keyframes alarm-pulse {
+            0%, 100% { background-color: rgba(225, 29, 72, 0.2); border-color: rgba(225, 29, 72, 0.8); }
+            50% { background-color: rgba(225, 29, 72, 0.6); border-color: rgba(244, 63, 94, 1); }
+        }
+        .alarm-active {
+            animation: alarm-pulse 1s infinite;
+        }
+
+        /* Canvas styling */
+        #webgl-container {
+            width: 100vw;
+            height: 100vh;
+            display: block;
+        }
+    </style>
+</head>
+<body class="w-full h-screen overflow-hidden flex flex-col justify-between">
+
+    <!-- 3D Canvas Container -->
+    <div id="webgl-container" class="absolute inset-0 z-0"></div>
+
+    <!-- HEADER / TOP BAR -->
+    <header class="relative z-10 p-4 flex flex-col md:flex-row justify-between items-center glass-panel m-3 rounded-2xl gap-3">
+        <div class="flex items-center space-x-3">
+            <div class="bg-blue-600 p-2.5 rounded-xl text-white shadow-lg shadow-blue-500/30">
+                <i class="fa-solid font-bold fa-house-signal text-xl"></i>
+            </div>
+            <div>
+                <h1 class="font-bold text-lg leading-tight tracking-wide text-white">Plot 1 - Glenshire Hills</h1>
+                <p class="text-xs text-slate-400 font-medium">Client: <span class="text-blue-400">Mr. Cecil Anertey Abbey</span></p>
+            </div>
+        </div>
+
+        <!-- Floor Cutaway Controls -->
+        <div class="flex items-center bg-slate-900/80 p-1.5 rounded-xl border border-slate-700/50 flex-wrap justify-center gap-1">
+            <span class="text-xs font-semibold px-2 text-slate-400 uppercase tracking-wider hidden sm:inline">Floors:</span>
+            <button onclick="setFloorFilter('ALL')" id="btn-floor-ALL" class="floor-btn px-3 py-1.5 text-xs font-medium rounded-lg transition-all bg-blue-600 text-white shadow">All</button>
+            <button onclick="setFloorFilter('ROOF')" id="btn-floor-ROOF" class="floor-btn px-3 py-1.5 text-xs font-medium text-slate-300 rounded-lg hover:bg-slate-800 transition-all">Roof</button>
+            <button onclick="setFloorFilter('2F')" id="btn-floor-2F" class="floor-btn px-3 py-1.5 text-xs font-medium text-slate-300 rounded-lg hover:bg-slate-800 transition-all">2nd Flr</button>
+            <button onclick="setFloorFilter('1F')" id="btn-floor-1F" class="floor-btn px-3 py-1.5 text-xs font-medium text-slate-300 rounded-lg hover:bg-slate-800 transition-all">1st Flr</button>
+            <button onclick="setFloorFilter('GF')" id="btn-floor-GF" class="floor-btn px-3 py-1.5 text-xs font-medium text-slate-300 rounded-lg hover:bg-slate-800 transition-all">Ground</button>
+            <button onclick="setFloorFilter('BSMT')" id="btn-floor-BSMT" class="floor-btn px-3 py-1.5 text-xs font-medium text-slate-300 rounded-lg hover:bg-slate-800 transition-all">Basement</button>
+        </div>
+
+        <!-- System Quick Info -->
+        <div class="flex items-center space-x-4 text-xs font-medium">
+            <div class="flex items-center space-x-1.5 text-emerald-400 bg-emerald-950/50 px-3 py-1.5 rounded-lg border border-emerald-800/40">
+                <i class="fa-solid fa-solar-panel"></i>
+                <span><strong id="solar-live-val">4.8</strong> kW</span>
+            </div>
+            <div class="flex items-center space-x-1.5 text-cyan-400 bg-cyan-950/50 px-3 py-1.5 rounded-lg border border-cyan-800/40">
+                <i class="fa-solid fa-droplet"></i>
+                <span><strong id="water-live-val">85</strong>%</span>
+            </div>
+            <div class="flex items-center space-x-1.5 text-rose-400 bg-rose-950/50 px-3 py-1.5 rounded-lg border border-rose-800/40 cursor-pointer" onclick="toggleHazardAlarm()">
+                <i class="fa-solid fa-shield-halved" id="alarm-icon"></i>
+                <span id="alarm-status-txt">Normal</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- FLOATING DASHBOARD & CAMERA CONTROLS -->
+    <div class="relative z-10 flex-1 flex flex-col md:flex-row justify-between pointer-events-none p-3 gap-3 overflow-hidden">
+
+        <!-- LEFT SIDEBAR: CAMERA & MODES -->
+        <div class="w-full md:w-64 flex flex-col gap-3 pointer-events-auto">
+            <!-- Preset Views -->
+            <div class="glass-panel p-3.5 rounded-2xl flex flex-col gap-2">
+                <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center justify-between">
+                    <span><i class="fa-solid fa-video mr-1.5"></i> Camera Presets</span>
+                </h3>
+                <div class="grid grid-cols-2 gap-2 text-xs">
+                    <button onclick="setCameraView('OVERVIEW')" class="bg-slate-800/80 hover:bg-blue-600/80 p-2 rounded-xl text-left font-medium transition flex items-center space-x-2 border border-slate-700/50">
+                        <i class="fa-solid fa-building text-blue-400"></i><span>Full Building</span>
+                    </button>
+                    <button onclick="setCameraView('POOL')" class="bg-slate-800/80 hover:bg-blue-600/80 p-2 rounded-xl text-left font-medium transition flex items-center space-x-2 border border-slate-700/50">
+                        <i class="fa-solid fa-water-ladder text-cyan-400"></i><span>Pool Deck</span>
+                    </button>
+                    <button onclick="setCameraView('LIVING')" class="bg-slate-800/80 hover:bg-blue-600/80 p-2 rounded-xl text-left font-medium transition flex items-center space-x-2 border border-slate-700/50">
+                        <i class="fa-solid fa-tv text-amber-400"></i><span>Living / Cinema</span>
+                    </button>
+                    <button onclick="setCameraView('ROOF')" class="bg-slate-800/80 hover:bg-blue-600/80 p-2 rounded-xl text-left font-medium transition flex items-center space-x-2 border border-slate-700/50">
+                        <i class="fa-solid fa-solar-panel text-emerald-400"></i><span>Roof Solar</span>
+                    </button>
+                </div>
+                <button onclick="resetCamera()" class="w-full mt-1 bg-slate-900/90 hover:bg-slate-800 p-2 rounded-xl text-xs font-semibold text-slate-300 transition border border-slate-700/50 flex items-center justify-center space-x-2">
+                    <i class="fa-solid fa-rotate-left"></i><span>Reset View</span>
+                </button>
+            </div>
+
+            <!-- Quick Preset Scenes -->
+            <div class="glass-panel p-3.5 rounded-2xl flex flex-col gap-2">
+                <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400">
+                    <i class="fa-solid fa-wand-magic-sparkles mr-1.5"></i> Scene Presets
+                </h3>
+                <div class="grid grid-cols-2 gap-2 text-xs">
+                    <button onclick="triggerScene('DEFAULT')" class="bg-slate-800/80 hover:bg-slate-700 p-2 rounded-xl font-medium border border-slate-700/50 text-left">
+                        <i class="fa-solid fa-sun text-amber-400 mr-1"></i> Day Normal
+                    </button>
+                    <button onclick="triggerScene('NIGHT')" class="bg-slate-800/80 hover:bg-slate-700 p-2 rounded-xl font-medium border border-slate-700/50 text-left">
+                        <i class="fa-solid fa-moon text-indigo-400 mr-1"></i> Night Mode
+                    </button>
+                    <button onclick="triggerScene('PARTY')" class="bg-slate-800/80 hover:bg-slate-700 p-2 rounded-xl font-medium border border-slate-700/50 text-left">
+                        <i class="fa-solid fa-champagne-glasses text-rose-400 mr-1"></i> Party Mode
+                    </button>
+                    <button onclick="triggerScene('AWAY')" class="bg-slate-800/80 hover:bg-slate-700 p-2 rounded-xl font-medium border border-slate-700/50 text-left">
+                        <i class="fa-solid fa-user-lock text-emerald-400 mr-1"></i> Away Mode
+                    </button>
+                </div>
+                <button onclick="runGuidedTour()" class="w-full mt-1 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 p-2.5 rounded-xl text-xs font-bold text-white transition shadow-lg shadow-blue-500/20 flex items-center justify-center space-x-2">
+                    <i class="fa-solid fa-circle-play"></i><span>Interactive Guided Tour</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- RIGHT TABBED CONTROL DASHBOARD -->
+        <div class="w-full md:w-96 glass-panel rounded-2xl flex flex-col pointer-events-auto overflow-hidden max-h-[75vh]">
+
+            <!-- Tab Headers -->
+            <div class="flex border-b border-slate-700/60 bg-slate-900/60 text-xs font-bold">
+                <button onclick="switchTab('lighting')" id="tab-btn-lighting" class="tab-btn flex-1 py-3 px-2 text-blue-400 border-b-2 border-blue-500 flex flex-col items-center gap-1 transition">
+                    <i class="fa-solid fa-lightbulb text-base"></i><span>Lighting</span>
+                </button>
+                <button onclick="switchTab('climate')" id="tab-btn-climate" class="tab-btn flex-1 py-3 px-2 text-slate-400 hover:text-slate-200 flex flex-col items-center gap-1 transition">
+                    <i class="fa-solid fa-temperature-arrow-up text-base"></i><span>Climate</span>
+                </button>
+                <button onclick="switchTab('security')" id="tab-btn-security" class="tab-btn flex-1 py-3 px-2 text-slate-400 hover:text-slate-200 flex flex-col items-center gap-1 transition">
+                    <i class="fa-solid fa-shield-cat text-base"></i><span>Security</span>
+                </button>
+                <button onclick="switchTab('energy')" id="tab-btn-energy" class="tab-btn flex-1 py-3 px-2 text-slate-400 hover:text-slate-200 flex flex-col items-center gap-1 transition">
+                    <i class="fa-solid fa-bolt text-base"></i><span>Energy</span>
+                </button>
+            </div>
+
+            <!-- Tab Contents Container -->
+            <div class="p-4 overflow-y-auto flex-1 space-y-4 text-xs">
+
+                <!-- TAB 1: LIGHTING & AV -->
+                <div id="tab-content-lighting" class="tab-content space-y-4">
+                    <div class="flex items-center justify-between glass-card p-3 rounded-xl">
+                        <div>
+                            <span class="font-bold text-slate-200 text-sm">Photocell / Daylight Sensor</span>
+                            <p class="text-slate-400 text-[11px]">Auto adjust outdoor & cove lights</p>
+                        </div>
+                        <label class="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" id="photocell-toggle" class="sr-only peer" onchange="togglePhotocell(this.checked)">
+                            <div class="w-9 h-5 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+                        </label>
+                    </div>
+
+                    <!-- Room Lights List -->
+                    <div class="space-y-3">
+                        <h4 class="font-bold uppercase tracking-wider text-slate-400 text-[11px]">24V LED Light Zones</h4>
+
+                        <!-- Zone 1: Living & Dining -->
+                        <div class="glass-card p-3 rounded-xl space-y-2">
+                            <div class="flex justify-between items-center">
+                                <span class="font-semibold text-slate-200">Living & Dining Cove</span>
+                                <input type="checkbox" id="light-living-toggle" checked onchange="toggleLightZone('living', this.checked)" class="accent-blue-500 h-4 w-4">
+                            </div>
+                            <div class="flex items-center space-x-2">
+                                <i class="fa-solid fa-sun text-slate-400"></i>
+                                <input type="range" min="0" max="100" value="80" oninput="adjustLightIntensity('living', this.value)" class="w-full accent-blue-500 h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer">
+                            </div>
+                        </div>
+
+                        <!-- Zone 2: Basement Cinema -->
+                        <div class="glass-card p-3 rounded-xl space-y-2">
+                            <div class="flex justify-between items-center">
+                                <span class="font-semibold text-slate-200">Basement Entertainment</span>
+                                <input type="checkbox" id="light-bsmt-toggle" checked onchange="toggleLightZone('bsmt', this.checked)" class="accent-blue-500 h-4 w-4">
+                            </div>
+                            <div class="flex items-center space-x-2">
+                                <i class="fa-solid fa-sun text-slate-400"></i>
+                                <input type="range" min="0" max="100" value="60" oninput="adjustLightIntensity('bsmt', this.value)" class="w-full accent-blue-500 h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer">
+                            </div>
+                        </div>
+
+                        <!-- Zone 3: Master Suite -->
+                        <div class="glass-card p-3 rounded-xl space-y-2">
+                            <div class="flex justify-between items-center">
+                                <span class="font-semibold text-slate-200">2nd Floor Master Bedroom</span>
+                                <input type="checkbox" id="light-master-toggle" checked onchange="toggleLightZone('master', this.checked)" class="accent-blue-500 h-4 w-4">
+                            </div>
+                            <div class="flex items-center space-x-2">
+                                <i class="fa-solid fa-sun text-slate-400"></i>
+                                <input type="range" min="0" max="100" value="75" oninput="adjustLightIntensity('master', this.value)" class="w-full accent-blue-500 h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- AV & Audio Integration -->
+                    <div class="space-y-2">
+                        <h4 class="font-bold uppercase tracking-wider text-slate-400 text-[11px]">AV & Smart Audio</h4>
+                        <div class="glass-card p-3 rounded-xl space-y-3">
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center space-x-2">
+                                    <i class="fa-solid fa-tv text-indigo-400"></i>
+                                    <span>Cinema Screen Playback</span>
+                                </div>
+                                <button onclick="toggleCinemaScreen()" id="btn-cinema" class="px-2.5 py-1 bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-500">PLAY TV</button>
+                            </div>
+                            <div class="flex items-center justify-between border-t border-slate-700/50 pt-2">
+                                <div class="flex items-center space-x-2">
+                                    <i class="fa-solid fa-compact-disc text-amber-400"></i>
+                                    <span>Smart Audio Visualizer</span>
+                                </div>
+                                <button onclick="toggleAudioVisualizer()" id="btn-audio" class="px-2.5 py-1 bg-slate-700 text-white font-semibold rounded-lg hover:bg-slate-600">OFF</button>
+                            </div>
+                            <p class="text-[10px] text-slate-400 italic">* Ceiling speakers active in Dining/Pool. No speakers in bedrooms as configured.</p>
+                        </div>
+                    </div>
+
+                    <!-- Curtains & Blinds Automation -->
+                    <div class="space-y-2">
+                        <h4 class="font-bold uppercase tracking-wider text-slate-400 text-[11px]">Curtain & Shade Automation</h4>
+                        <div class="glass-card p-3 rounded-xl flex justify-between items-center">
+                            <span class="font-semibold text-slate-200">Motorized Glass Blinds</span>
+                            <div class="space-x-2">
+                                <button onclick="setBlindsState(true)" class="px-2.5 py-1 bg-slate-800 hover:bg-blue-600 text-white rounded-lg border border-slate-700">Open</button>
+                                <button onclick="setBlindsState(false)" class="px-2.5 py-1 bg-slate-800 hover:bg-blue-600 text-white rounded-lg border border-slate-700">Close</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TAB 2: CLIMATE / HVAC -->
+                <div id="tab-content-climate" class="tab-content hidden space-y-4">
+                    <div class="glass-card p-3 rounded-xl flex items-center justify-between">
+                        <div class="flex items-center space-x-3">
+                            <div class="p-2 bg-cyan-950 text-cyan-400 rounded-lg">
+                                <i class="fa-solid fa-fan text-lg animate-spin" style="animation-duration: 4s;"></i>
+                            </div>
+                            <div>
+                                <h4 class="font-bold text-slate-200">HVAC Master Status</h4>
+                                <p class="text-[11px] text-slate-400">Compressors Active (Outdoor)</p>
+                            </div>
+                        </div>
+                        <span class="px-2.5 py-1 bg-emerald-500/20 text-emerald-400 font-bold rounded-full text-[10px] border border-emerald-500/30">RUNNING</span>
+                    </div>
+
+                    <!-- HVAC Zones -->
+                    <div class="space-y-3">
+                        <h4 class="font-bold uppercase tracking-wider text-slate-400 text-[11px]">Zone Climate Control</h4>
+
+                        <!-- Ground Floor Zone -->
+                        <div class="glass-card p-3 rounded-xl space-y-2">
+                            <div class="flex justify-between items-center">
+                                <span class="font-semibold text-slate-200">Ground Floor (Living/Kitchen)</span>
+                                <span class="text-cyan-400 font-bold" id="temp-gf-val">22°C</span>
+                            </div>
+                            <input type="range" min="16" max="30" value="22" oninput="setZoneTemp('gf', this.value)" class="w-full accent-cyan-500 h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer">
+                            <div class="flex justify-between text-[10px] text-slate-400">
+                                <span>Cool Breeze Active</span>
+                                <span>Target: 22°C</span>
+                            </div>
+                        </div>
+
+                        <!-- 2nd Floor Zone -->
+                        <div class="glass-card p-3 rounded-xl space-y-2">
+                            <div class="flex justify-between items-center">
+                                <span class="font-semibold text-slate-200">Master Suite (2nd Floor)</span>
+                                <span class="text-cyan-400 font-bold" id="temp-master-val">20°C</span>
+                            </div>
+                            <input type="range" min="16" max="30" value="20" oninput="setZoneTemp('master', this.value)" class="w-full accent-cyan-500 h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer">
+                            <div class="flex justify-between text-[10px] text-slate-400">
+                                <span>Cool Breeze Active</span>
+                                <span>Target: 20°C</span>
+                            </div>
+                        </div>
+
+                        <!-- Basement Zone -->
+                        <div class="glass-card p-3 rounded-xl space-y-2">
+                            <div class="flex justify-between items-center">
+                                <span class="font-semibold text-slate-200">Basement Entertainment</span>
+                                <span class="text-amber-400 font-bold" id="temp-bsmt-val">24°C</span>
+                            </div>
+                            <input type="range" min="16" max="30" value="24" oninput="setZoneTemp('bsmt', this.value)" class="w-full accent-cyan-500 h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TAB 3: SECURITY & ACCESS -->
+                <div id="tab-content-security" class="tab-content hidden space-y-4">
+
+                    <!-- CCTV 14 Camera Selector -->
+                    <div class="space-y-2">
+                        <div class="flex justify-between items-center">
+                            <h4 class="font-bold uppercase tracking-wider text-slate-400 text-[11px]">14 x CCTV Camera Matrix</h4>
+                            <span class="text-[10px] text-emerald-400 font-bold"><i class="fa-solid fa-circle text-[8px] animate-ping mr-1"></i>LIVE</span>
+                        </div>
+                        <select id="camera-selector" onchange="switchToCCTVPOV(this.value)" class="w-full bg-slate-900 border border-slate-700 text-slate-200 p-2 rounded-xl text-xs focus:ring-2 focus:ring-blue-500">
+                            <option value="-1">-- Normal Free Orbit View --</option>
+                            <option value="0">Cam 1: Main Sliding Gate</option>
+                            <option value="1">Cam 2: Front Entrance & NFC</option>
+                            <option value="2">Cam 3: Perimeter West</option>
+                            <option value="3">Cam 4: Perimeter East</option>
+                            <option value="4">Cam 5: Pool Deck North</option>
+                            <option value="5">Cam 6: Swimming Pool & Sauna</option>
+                            <option value="6">Cam 7: Koi Pond Garden</option>
+                            <option value="7">Cam 8: Ground Floor Living</option>
+                            <option value="8">Cam 9: Wet & Main Kitchen</option>
+                            <option value="9">Cam 10: 1st Floor Family Lounge</option>
+                            <option value="10">Cam 11: 2nd Floor Master Entry</option>
+                            <option value="11">Cam 12: Roof Terrace & Solar</option>
+                            <option value="12">Cam 13: Basement Mech Room</option>
+                            <option value="13">Cam 14: Basement Cinema (14th Cam)</option>
+                        </select>
+                    </div>
+
+                    <!-- Access Control -->
+                    <div class="space-y-2">
+                        <h4 class="font-bold uppercase tracking-wider text-slate-400 text-[11px]">Access Control & Intercom</h4>
+                        <div class="glass-card p-3 rounded-xl space-y-2">
+                            <div class="flex justify-between items-center">
+                                <div>
+                                    <span class="font-semibold text-slate-200">Automated Sliding Gate</span>
+                                    <p class="text-[10px] text-slate-400" id="gate-status-text">State: CLOSED</p>
+                                </div>
+                                <button onclick="toggleMainGate()" id="btn-gate-toggle" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 font-bold rounded-lg text-white">OPEN GATE</button>
+                            </div>
+                        </div>
+
+                        <div class="glass-card p-3 rounded-xl flex justify-between items-center">
+                            <div>
+                                <span class="font-semibold text-slate-200">Front Door NFC Access</span>
+                                <p class="text-[10px] text-slate-400">Tap card simulation</p>
+                            </div>
+                            <button onclick="simulateNFCScan()" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 font-bold rounded-lg border border-slate-700 text-emerald-400">
+                                <i class="fa-solid fa-fingerprint mr-1"></i> SCAN NFC
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Safety & Hazard Trigger -->
+                    <div class="space-y-2">
+                        <h4 class="font-bold uppercase tracking-wider text-slate-400 text-[11px]">Hazard & Fire Safety</h4>
+                        <div class="glass-card p-3 rounded-xl flex justify-between items-center border border-rose-900/50">
+                            <div>
+                                <span class="font-semibold text-rose-300">Smoke & Water Sensors</span>
+                                <p class="text-[10px] text-slate-400">Kitchens, Bsmt, Mech Room</p>
+                            </div>
+                            <button onclick="toggleHazardAlarm()" id="btn-alarm-trigger" class="px-3 py-1.5 bg-rose-700 hover:bg-rose-600 font-bold text-white rounded-lg shadow-lg shadow-rose-900/40">TEST ALARM</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TAB 4: ENERGY & UTILITIES -->
+                <div id="tab-content-energy" class="tab-content hidden space-y-4">
+                    <!-- Solar PV Panel -->
+                    <div class="glass-card p-3.5 rounded-xl space-y-3">
+                        <div class="flex justify-between items-center">
+                            <div class="flex items-center space-x-2">
+                                <i class="fa-solid fa-solar-panel text-emerald-400 text-lg"></i>
+                                <span class="font-bold text-slate-200">Solar PV Array</span>
+                            </div>
+                            <span class="text-emerald-400 font-bold text-sm" id="solar-gen-text">4.8 kW</span>
+                        </div>
+                        <div class="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+                            <div class="bg-emerald-500 h-full rounded-full transition-all" style="width: 75%;"></div>
+                        </div>
+                        <div class="flex justify-between text-[11px] text-slate-400">
+                            <span>Inverter: Active</span>
+                            <span>Battery Storage: 92%</span>
+                        </div>
+                    </div>
+
+                    <!-- Water Tank Monitoring -->
+                    <div class="glass-card p-3.5 rounded-xl space-y-3">
+                        <div class="flex justify-between items-center">
+                            <div class="flex items-center space-x-2">
+                                <i class="fa-solid fa-faucet-drip text-cyan-400 text-lg"></i>
+                                <span class="font-bold text-slate-200">Polytank Level Monitor</span>
+                            </div>
+                            <span class="text-cyan-400 font-bold text-sm" id="water-tank-text">85%</span>
+                        </div>
+                        <div class="w-full bg-slate-800 h-2.5 rounded-full overflow-hidden">
+                            <div id="water-tank-bar" class="bg-cyan-500 h-full rounded-full transition-all" style="width: 85%;"></div>
+                        </div>
+                        <div class="flex justify-between items-center border-t border-slate-700/50 pt-2">
+                            <span class="text-[11px] text-slate-400">Booster Pump Status: <strong id="pump-status" class="text-slate-200">Idle</strong></span>
+                            <button onclick="fillWaterTank()" class="px-2.5 py-1 bg-cyan-800 hover:bg-cyan-700 text-cyan-100 text-[11px] font-bold rounded-lg">Fill Tank</button>
+                        </div>
+                    </div>
+
+                    <!-- Automated Irrigation -->
+                    <div class="glass-card p-3.5 rounded-xl flex items-center justify-between">
+                        <div>
+                            <span class="font-bold text-slate-200">Lawn Irrigation Sprinklers</span>
+                            <p class="text-[11px] text-slate-400">Ground garden & landscaping</p>
+                        </div>
+                        <button onclick="toggleIrrigation()" id="btn-irrigation" class="px-3 py-1.5 bg-slate-800 hover:bg-cyan-600 text-white font-bold rounded-lg border border-slate-700 transition">START</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- FOOTER STATUS BAR -->
+    <footer class="relative z-10 p-2.5 glass-panel m-3 rounded-xl flex flex-col md:flex-row justify-between items-center text-xs text-slate-400">
+        <div class="flex items-center space-x-4">
+            <span><i class="fa-solid fa-location-dot text-blue-400 mr-1"></i> Glenshire Hills, Plot 1</span>
+            <span class="hidden sm:inline">|</span>
+            <span class="hidden sm:inline"><i class="fa-solid fa-microchip text-indigo-400 mr-1"></i> Smart System: Online</span>
+        </div>
+        <div id="cctv-hud-status" class="font-semibold text-emerald-400 mt-1 md:mt-0">
+            <i class="fa-solid fa-video mr-1"></i> Orbit Camera Control Active
+        </div>
+    </footer>
+
+    <!-- JAVASCRIPT SIMULATION CORE -->
+    <script>
+        /* ----------------------------------------------------
+           1. THREE.JS SCENE SETUP & ARCHITECTURAL MODELING
+        ---------------------------------------------------- */
+        let scene, camera, renderer, controls;
+        let floorGroups = { BSMT: new THREE.Group(), GF: new THREE.Group(), '1F': new THREE.Group(), '2F': new THREE.Group(), ROOF: new THREE.Group() };
+        
+        // Interactive Elements Handles
+        let cctvCameras = [];
+        let lightFixtures = [];
+        let hvacParticles = [];
+        let waterParticles = [];
+        let audioWaveParticles = [];
+        let energyFlowParticles = [];
+        let slidingGateMesh;
+        let blindsMeshes = [];
+        let waterTankMesh, waterLevelMesh;
+        let cinemaScreenMaterial;
+
+        // States
+        let isGateOpen = false;
+        let isAlarmActive = false;
+        let isCinemaPlaying = false;
+        let isAudioVisualizerActive = false;
+        let isIrrigationActive = false;
+        let currentCCTVIndex = -1;
+
+        // Colors
+        const COLOR_WALL = 0xe2e8f0;
+        const COLOR_GLASS = 0x93c5fd;
+        const COLOR_DECK = 0x78350f;
+        const COLOR_GRASS = 0x15803d;
+        const COLOR_POOL = 0x0284c7;
+        const COLOR_MASONRY = 0xf1f5f9;
+        const COLOR_FRAME = 0x475569;
+
+        function addWindowPanel(parent, x, y, z, width, height, depth = 0.18, glassTint = 0x7dd3fc) {
+            const frameMat = new THREE.MeshStandardMaterial({ color: COLOR_FRAME, roughness: 0.7, metalness: 0.15 });
+            const glassMat = new THREE.MeshPhysicalMaterial({
+                color: glassTint,
+                transparent: true,
+                opacity: 0.5,
+                transmission: 0.8,
+                roughness: 0.08,
+                metalness: 0.1
+            });
+
+            const frame = new THREE.Mesh(new THREE.BoxGeometry(width + 0.35, height + 0.35, depth), frameMat);
+            frame.position.set(x, y, z);
+            parent.add(frame);
+
+            const glass = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth * 0.75), glassMat);
+            glass.position.set(x, y, z + 0.02);
+            parent.add(glass);
+        }
+
+        function initScene() {
+            const container = document.getElementById('webgl-container');
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x0f172a);
+            scene.fog = new THREE.FogExp2(0x0f172a, 0.008);
+
+            camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.5, 1000);
+            camera.position.set(45, 35, 55);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            renderer.toneMapping = THREE.ACESFilmicToneMapping;
+            renderer.toneMappingExposure = 1.0;
+            container.appendChild(renderer.domElement);
+
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            controls.maxPolarAngle = Math.PI / 2 + 0.05; // allow slightly below horizon
+            controls.target.set(0, 4, 0);
+
+            // Lighting Setup
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            scene.add(ambientLight);
+
+            const sunLight = new THREE.DirectionalLight(0xfff7ed, 1.2);
+            sunLight.position.set(40, 60, 20);
+            sunLight.castShadow = true;
+            sunLight.shadow.mapSize.width = 2048;
+            sunLight.shadow.mapSize.height = 2048;
+            sunLight.shadow.camera.near = 0.5;
+            sunLight.shadow.camera.far = 150;
+            const d = 40;
+            sunLight.shadow.camera.left = -d;
+            sunLight.shadow.camera.right = d;
+            sunLight.shadow.camera.top = d;
+            sunLight.shadow.camera.bottom = -d;
+            scene.add(sunLight);
+
+            // Add Base Ground & Site
+            buildSiteAndLandscape();
+
+            // Add Floor Levels to Scene
+            Object.values(floorGroups).forEach(group => scene.add(group));
+
+            // Build Architectural Levels
+            buildBasementLevel();
+            buildGroundFloorLevel();
+            buildFirstFloorLevel();
+            buildSecondFloorLevel();
+            buildRoofLevel();
+
+            // Build CCTV System (14 Cameras)
+            setupCCTVSystem();
+
+            // Build Particle Systems
+            setupParticleEffects();
+
+            // Window Resize Listener
+            window.addEventListener('resize', onWindowResize);
+
+            // Start Render Loop
+            animate();
+        }
+
+        /* ----------------------------------------------------
+           2. SITE, LANDSCAPING & POOL
+        ---------------------------------------------------- */
+        function buildSiteAndLandscape() {
+            // Main Grass Plot
+            const grassGeo = new THREE.BoxGeometry(70, 1, 60);
+            const grassMat = new THREE.MeshStandardMaterial({ color: COLOR_GRASS, roughness: 0.9 });
+            const grass = new THREE.Mesh(grassGeo, grassMat);
+            grass.position.set(0, -0.5, 0);
+            grass.receiveShadow = true;
+            scene.add(grass);
+
+            // Perimeter Boundary Wall
+            const wallMat = new THREE.MeshStandardMaterial({ color: 0x334155 });
+            const perimeterWall = new THREE.Mesh(new THREE.BoxGeometry(68, 3, 0.6), wallMat);
+            perimeterWall.position.set(0, 1.5, 29);
+            scene.add(perimeterWall);
+
+            // Sliding Gate Mesh
+            const gateMat = new THREE.MeshStandardMaterial({ color: 0x0284c7, metalness: 0.8, roughness: 0.2 });
+            slidingGateMesh = new THREE.Mesh(new THREE.BoxGeometry(8, 2.5, 0.3), gateMat);
+            slidingGateMesh.position.set(10, 1.25, 29);
+            scene.add(slidingGateMesh);
+        }
+
+        /* ----------------------------------------------------
+           3. ARCHITECTURAL FLOORS CREATION
+        ---------------------------------------------------- */
+        function buildBasementLevel() {
+            const grp = floorGroups.BSMT;
+            // Floor Slab
+            const floor = new THREE.Mesh(new THREE.BoxGeometry(26, 0.5, 20), new THREE.MeshStandardMaterial({ color: 0x475569 }));
+            floor.position.set(0, -3.75, 0);
+            floor.receiveShadow = true;
+            grp.add(floor);
+
+            // Walls (Basement Cinema & Mech Space)
+            const wallMat = new THREE.MeshStandardMaterial({ color: 0x1e293b });
+            const backWall = new THREE.Mesh(new THREE.BoxGeometry(26, 3.5, 0.4), wallMat);
+            backWall.position.set(0, -1.75, -9.8);
+            grp.add(backWall);
+
+            // Cinema Screen simulation in basement
+            const screenGeo = new THREE.PlaneGeometry(8, 4.5);
+            cinemaScreenMaterial = new THREE.MeshBasicMaterial({ color: 0x0284c7 });
+            const screenMesh = new THREE.Mesh(screenGeo, cinemaScreenMaterial);
+            screenMesh.position.set(-4, -1.5, -9.5);
+            grp.add(screenMesh);
+
+            // Add Light Zone Spot
+            const bsmtLight = new THREE.PointLight(0xfef08a, 0.8, 15);
+            bsmtLight.position.set(-4, -0.5, -3);
+            grp.add(bsmtLight);
+            lightFixtures.push({ zone: 'bsmt', light: bsmtLight });
+        }
+
+        function buildGroundFloorLevel() {
+            const grp = floorGroups.GF;
+
+            const slabMat = new THREE.MeshStandardMaterial({ color: 0xdbeafe, roughness: 0.5, metalness: 0.08 });
+            const slab = new THREE.Mesh(new THREE.BoxGeometry(32, 0.6, 24), slabMat);
+            slab.position.set(0, 0, 0);
+            slab.receiveShadow = true;
+            grp.add(slab);
+
+            const wallMat = new THREE.MeshStandardMaterial({ color: COLOR_MASONRY, roughness: 0.85, metalness: 0.08 });
+            const leftWall = new THREE.Mesh(new THREE.BoxGeometry(0.35, 4.4, 18), wallMat);
+            leftWall.position.set(-15.2, 2.2, 0);
+            grp.add(leftWall);
+
+            const rightWall = new THREE.Mesh(new THREE.BoxGeometry(0.35, 4.4, 18), wallMat);
+            rightWall.position.set(15.2, 2.2, 0);
+            grp.add(rightWall);
+
+            const backWall = new THREE.Mesh(new THREE.BoxGeometry(30.6, 4.4, 0.35), wallMat);
+            backWall.position.set(0, 2.2, -9.2);
+            grp.add(backWall);
+
+            const frontWall = new THREE.Mesh(new THREE.BoxGeometry(18, 4.4, 0.35), wallMat);
+            frontWall.position.set(8, 2.2, 11.8);
+            grp.add(frontWall);
+
+            const doorFrame = new THREE.Mesh(new THREE.BoxGeometry(3.4, 3.8, 0.22), new THREE.MeshStandardMaterial({ color: 0x7c4a2d, roughness: 0.8 }));
+            doorFrame.position.set(8.7, 1.9, 11.95);
+            grp.add(doorFrame);
+
+            const doorGlass = new THREE.Mesh(new THREE.BoxGeometry(2.8, 3.2, 0.08), new THREE.MeshPhysicalMaterial({ color: 0x93c5fd, transparent: true, opacity: 0.35, transmission: 0.8 }));
+            doorGlass.position.set(8.7, 1.9, 12.02);
+            grp.add(doorGlass);
+
+            const porch = new THREE.Mesh(new THREE.BoxGeometry(7, 0.3, 4), new THREE.MeshStandardMaterial({ color: 0xcbd5e1, roughness: 0.7 }));
+            porch.position.set(8.2, 0.15, 13.6);
+            grp.add(porch);
+
+            addWindowPanel(grp, 0.5, 2.2, 11.95, 8, 2.5, 0.18, 0x9ad7ff);
+            addWindowPanel(grp, -11, 2.2, 11.95, 5.5, 2.4, 0.18, 0x9ad7ff);
+            addWindowPanel(grp, -11, 2.2, -9.2, 7, 2.2, 0.18, 0x9ad7ff);
+            addWindowPanel(grp, 6, 2.2, -9.2, 7.5, 2.2, 0.18, 0x9ad7ff);
+            addWindowPanel(grp, -15.15, 2.2, -4, 2.2, 2.6, 0.18, 0x9ad7ff);
+            addWindowPanel(grp, 15.15, 2.2, -4, 2.2, 2.6, 0.18, 0x9ad7ff);
+
+            const deck = new THREE.Mesh(new THREE.BoxGeometry(14, 0.5, 18), new THREE.MeshStandardMaterial({ color: COLOR_DECK, roughness: 0.7 }));
+            deck.position.set(15, 0, 2);
+            grp.add(deck);
+
+            const poolWater = new THREE.Mesh(new THREE.BoxGeometry(10, 0.4, 12), new THREE.MeshStandardMaterial({ color: COLOR_POOL, transparent: true, opacity: 0.85, roughness: 0.1 }));
+            poolWater.position.set(16, 0.05, 2);
+            grp.add(poolWater);
+
+            const glassMat = new THREE.MeshPhysicalMaterial({ color: COLOR_GLASS, transparent: true, opacity: 0.3, transmission: 0.9, roughness: 0.1 });
+            const glassWall = new THREE.Mesh(new THREE.BoxGeometry(16, 4, 0.2), glassMat);
+            glassWall.position.set(-2, 2.3, 11.9);
+            grp.add(glassWall);
+
+            const blindMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, side: THREE.DoubleSide });
+            const blindMesh = new THREE.Mesh(new THREE.PlaneGeometry(15.8, 3.8), blindMat);
+            blindMesh.position.set(-2, 2.3, 11.8);
+            grp.add(blindMesh);
+            blindsMeshes.push(blindMesh);
+
+            const nfcLed = new THREE.Mesh(new THREE.SphereGeometry(0.15), new THREE.MeshBasicMaterial({ color: 0x10b981 }));
+            nfcLed.position.set(8.2, 2, 12.1);
+            nfcLed.name = "NFC_LED";
+            grp.add(nfcLed);
+
+            const livingLight = new THREE.PointLight(0xfef08a, 1.2, 20);
+            livingLight.position.set(-2, 3.5, 3);
+            grp.add(livingLight);
+            lightFixtures.push({ zone: 'living', light: livingLight });
+        }
+
+        function buildFirstFloorLevel() {
+            const grp = floorGroups['1F'];
+
+            const slab = new THREE.Mesh(new THREE.BoxGeometry(26, 0.5, 22), new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.6 }));
+            slab.position.set(-2, 4.5, 0);
+            slab.receiveShadow = true;
+            grp.add(slab);
+
+            const wallMat = new THREE.MeshStandardMaterial({ color: COLOR_MASONRY, roughness: 0.85, metalness: 0.08 });
+            const wall1 = new THREE.Mesh(new THREE.BoxGeometry(0.3, 4, 14), wallMat);
+            wall1.position.set(-2, 6.75, 0);
+            grp.add(wall1);
+
+            const wallLeft = new THREE.Mesh(new THREE.BoxGeometry(0.35, 4.3, 18), wallMat);
+            wallLeft.position.set(-14.5, 6.8, 0);
+            grp.add(wallLeft);
+
+            const wallRight = new THREE.Mesh(new THREE.BoxGeometry(0.35, 4.3, 18), wallMat);
+            wallRight.position.set(10.5, 6.8, 0);
+            grp.add(wallRight);
+
+            const frontBalcony = new THREE.Mesh(new THREE.BoxGeometry(10, 0.26, 3.4), new THREE.MeshStandardMaterial({ color: 0xcbd5e1, roughness: 0.7 }));
+            frontBalcony.position.set(-2, 5.2, 10.2);
+            grp.add(frontBalcony);
+
+            addWindowPanel(grp, -2, 6.9, 11.9, 10, 2.3, 0.18, 0x9ad7ff);
+            addWindowPanel(grp, -9.8, 6.9, -9.4, 5.5, 2.2, 0.18, 0x9ad7ff);
+            addWindowPanel(grp, 6.2, 6.9, -9.4, 6, 2.2, 0.18, 0x9ad7ff);
+
+            const railMat = new THREE.MeshPhysicalMaterial({ color: COLOR_GLASS, transparent: true, opacity: 0.45 });
+            const railing = new THREE.Mesh(new THREE.BoxGeometry(25.8, 1.2, 0.1), railMat);
+            railing.position.set(-2, 5.35, 10.9);
+            grp.add(railing);
+        }
+
+        function buildSecondFloorLevel() {
+            const grp = floorGroups['2F'];
+
+            const slab = new THREE.Mesh(new THREE.BoxGeometry(24, 0.5, 20), new THREE.MeshStandardMaterial({ color: 0xe2e8f0, roughness: 0.65 }));
+            slab.position.set(-3, 9, 0);
+            slab.receiveShadow = true;
+            grp.add(slab);
+
+            const wallMat = new THREE.MeshStandardMaterial({ color: COLOR_MASONRY, roughness: 0.85, metalness: 0.08 });
+            const mWall = new THREE.Mesh(new THREE.BoxGeometry(14, 4, 0.3), wallMat);
+            mWall.position.set(-7, 11.25, -9.8);
+            grp.add(mWall);
+
+            const frontWall = new THREE.Mesh(new THREE.BoxGeometry(14, 4, 0.3), wallMat);
+            frontWall.position.set(-6, 11.25, 9.7);
+            grp.add(frontWall);
+
+            addWindowPanel(grp, -7, 11.2, 9.9, 8.5, 2.6, 0.18, 0x9ad7ff);
+            addWindowPanel(grp, -12, 11.2, -9.6, 5.6, 2.4, 0.18, 0x9ad7ff);
+            addWindowPanel(grp, -0.5, 11.2, -9.6, 5.2, 2.4, 0.18, 0x9ad7ff);
+
+            const masterLight = new THREE.PointLight(0xffedd5, 1.0, 18);
+            masterLight.position.set(-7, 12, 0);
+            grp.add(masterLight);
+            lightFixtures.push({ zone: 'master', light: masterLight });
+        }
+
+        function buildRoofLevel() {
+            const grp = floorGroups.ROOF;
+
+            const roofBase = new THREE.Mesh(new THREE.BoxGeometry(22, 0.4, 18), new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.75 }));
+            roofBase.position.set(-5, 13.5, 0);
+            grp.add(roofBase);
+
+            const ridge = new THREE.Mesh(new THREE.BoxGeometry(20, 0.3, 0.35), new THREE.MeshStandardMaterial({ color: 0x64748b, roughness: 0.8 }));
+            ridge.position.set(-5, 14.1, 0);
+            ridge.rotation.z = 0.15;
+            grp.add(ridge);
+
+            const solarMat = new THREE.MeshStandardMaterial({ color: 0x1e3a8a, metalness: 0.9, roughness: 0.2 });
+            for (let i = 0; i < 4; i++) {
+                for (let j = 0; j < 3; j++) {
+                    const pv = new THREE.Mesh(new THREE.BoxGeometry(3, 0.1, 2), solarMat);
+                    pv.position.set(-11 + i * 3.5, 13.8, -5 + j * 2.5);
+                    pv.rotation.x = 0.15;
+                    grp.add(pv);
+                }
+            }
+
+            const tankMat = new THREE.MeshStandardMaterial({ color: 0x0284c7, metalness: 0.3, roughness: 0.4 });
+            waterTankMesh = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.5, 3.5, 16), tankMat);
+            waterTankMesh.position.set(3, 15.5, -6);
+            grp.add(waterTankMesh);
+
+            waterLevelMesh = new THREE.Mesh(new THREE.CylinderGeometry(1.55, 1.55, 0.2, 16), new THREE.MeshBasicMaterial({ color: 0x38bdf8 }));
+            waterLevelMesh.position.set(3, 15.5, -6);
+            grp.add(waterLevelMesh);
+        }
+
+        /* ----------------------------------------------------
+           4. EXACT 14 CCTV CAMERAS SETUP & POVs
+        ---------------------------------------------------- */
+        const cameraDefinitions = [
+            { id: 0, name: "Main Sliding Gate", pos: [12, 4, 27], lookAt: [10, 1, 29] },
+            { id: 1, name: "Front Entrance & NFC", pos: [10, 4, 14], lookAt: [8, 2, 12] },
+            { id: 2, name: "Perimeter West", pos: [-25, 6, 25], lookAt: [-10, 2, 0] },
+            { id: 3, name: "Perimeter East", pos: [25, 6, -25], lookAt: [10, 2, 0] },
+            { id: 4, name: "Pool Deck North", pos: [22, 5, -5], lookAt: [15, 1, 2] },
+            { id: 5, name: "Swimming Pool & Sauna", pos: [20, 4, 8], lookAt: [15, 0.5, 2] },
+            { id: 6, name: "Koi Pond Garden", pos: [-20, 3, 15], lookAt: [-12, 0.5, 10] },
+            { id: 7, name: "Ground Floor Living", pos: [-8, 4.5, 8], lookAt: [-2, 2, 3] },
+            { id: 8, name: "Wet & Main Kitchen", pos: [2, 4.5, -6], lookAt: [-2, 2, -5] },
+            { id: 9, name: "1st Floor Family Lounge", pos: [-8, 8, 5], lookAt: [-2, 6, 0] },
+            { id: 10, name: "2nd Floor Master Entry", pos: [-12, 12, 6], lookAt: [-7, 11, 0] },
+            { id: 11, name: "Roof Terrace & Solar", pos: [5, 16, 5], lookAt: [-5, 14, -2] },
+            { id: 12, name: "Basement Mech Room", pos: [8, -1, -5], lookAt: [0, -2, -5] },
+            { id: 13, name: "Basement Cinema (14th)", pos: [4, -1, 5], lookAt: [-4, -1.5, -9.5] }
+        ];
+
+        function setupCCTVSystem() {
+            const camGeo = new THREE.ConeGeometry(0.4, 0.8, 8);
+            camGeo.rotateX(Math.PI / 2);
+            const camMat = new THREE.MeshBasicMaterial({ color: 0xef4444, wireframe: true });
+
+            cameraDefinitions.forEach(def => {
+                const mesh = new THREE.Mesh(camGeo, camMat);
+                mesh.position.set(...def.pos);
+                mesh.lookAt(...def.lookAt);
+                scene.add(mesh);
+                cctvCameras.push({ mesh: mesh, def: def });
+            });
+        }
+
+        function switchToCCTVPOV(camIndexStr) {
+            const idx = parseInt(camIndexStr);
+            currentCCTVIndex = idx;
+            const hud = document.getElementById('cctv-hud-status');
+
+            if (idx === -1) {
+                // Free Orbit Mode
+                controls.enabled = true;
+                resetCamera();
+                hud.innerHTML = `<i class="fa-solid fa-video mr-1"></i> Orbit Camera Control Active`;
+                hud.className = "font-semibold text-emerald-400 mt-1 md:mt-0";
+                return;
+            }
+
+            const targetCam = cctvCameras[idx].def;
+            controls.enabled = false;
+            
+            // Move Main Camera to CCTV POV position
+            camera.position.set(...targetCam.pos);
+            camera.lookAt(...targetCam.lookAt);
+
+            hud.innerHTML = `<i class="fa-solid fa-circle text-rose-500 animate-ping mr-1"></i> CCTV FEED ACTIVE: ${targetCam.name}`;
+            hud.className = "font-bold text-rose-400 mt-1 md:mt-0";
+        }
+
+        /* ----------------------------------------------------
+           5. ANIMATED PARTICLE EFFECTS (HVAC, IRRIGATION, ENERGY)
+        ---------------------------------------------------- */
+        function setupParticleEffects() {
+            // Irrigation Water Particles
+            const waterGeo = new THREE.BufferGeometry();
+            const waterCount = 300;
+            const posArray = new Float32Array(waterCount * 3);
+            for (let i = 0; i < waterCount * 3; i += 3) {
+                posArray[i] = -15 + (Math.random() - 0.5) * 10;
+                posArray[i + 1] = 0.5 + Math.random() * 2;
+                posArray[i + 2] = 18 + (Math.random() - 0.5) * 8;
+            }
+            waterGeo.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
+            const waterMat = new THREE.PointsMaterial({ size: 0.15, color: 0x38bdf8, transparent: true, opacity: 0.8 });
+            const waterParticlesMesh = new THREE.Points(waterGeo, waterMat);
+            waterParticlesMesh.visible = false;
+            scene.add(waterParticlesMesh);
+            waterParticles.push(waterParticlesMesh);
+        }
+
+        /* ----------------------------------------------------
+           6. INTERACTIVE CONTROLS & UI ACTIONS
+        ---------------------------------------------------- */
+        function setFloorFilter(floorKey) {
+            // Update Active Button Styling
+            document.querySelectorAll('.floor-btn').forEach(btn => {
+                btn.className = "floor-btn px-3 py-1.5 text-xs font-medium text-slate-300 rounded-lg hover:bg-slate-800 transition-all";
+            });
+            document.getElementById(`btn-floor-${floorKey}`).className = "floor-btn px-3 py-1.5 text-xs font-medium rounded-lg transition-all bg-blue-600 text-white shadow";
+
+            // Hide/Show Floor Groups
+            if (floorKey === 'ALL') {
+                Object.values(floorGroups).forEach(grp => grp.visible = true);
+            } else {
+                const keys = ['BSMT', 'GF', '1F', '2F', 'ROOF'];
+                const targetIdx = keys.indexOf(floorKey);
+                keys.forEach((k, idx) => {
+                    floorGroups[k].visible = idx <= targetIdx;
+                });
+            }
+        }
+
+        function setCameraView(viewName) {
+            document.getElementById('camera-selector').value = "-1";
+            switchToCCTVPOV("-1");
+
+            switch (viewName) {
+                case 'OVERVIEW':
+                    animateCameraPosition(45, 35, 55, 0, 4, 0);
+                    break;
+                case 'POOL':
+                    animateCameraPosition(28, 12, 18, 15, 1, 2);
+                    break;
+                case 'LIVING':
+                    animateCameraPosition(-5, 6, 22, -2, 2, 3);
+                    break;
+                case 'ROOF':
+                    animateCameraPosition(12, 24, 15, -5, 14, 0);
+                    break;
+            }
+        }
+
+        function resetCamera() {
+            animateCameraPosition(45, 35, 55, 0, 4, 0);
+        }
+
+        function animateCameraPosition(px, py, pz, tx, ty, tz) {
+            const startPos = camera.position.clone();
+            const endPos = new THREE.Vector3(px, py, pz);
+            const startTarget = controls.target.clone();
+            const endTarget = new THREE.Vector3(tx, ty, tz);
+
+            let progress = 0;
+            function step() {
+                progress += 0.04;
+                if (progress <= 1) {
+                    camera.position.lerpVectors(startPos, endPos, progress);
+                    controls.target.lerpVectors(startTarget, endTarget, progress);
+                    controls.update();
+                    requestAnimationFrame(step);
+                }
+            }
+            step();
+        }
+
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.className = "tab-btn flex-1 py-3 px-2 text-slate-400 hover:text-slate-200 flex flex-col items-center gap-1 transition";
+            });
+
+            document.getElementById(`tab-content-${tabId}`).classList.remove('hidden');
+            document.getElementById(`tab-btn-${tabId}`).className = "tab-btn flex-1 py-3 px-2 text-blue-400 border-b-2 border-blue-500 flex flex-col items-center gap-1 transition";
+        }
+
+        /* LIGHTING & SMART FUNCTIONS */
+        function toggleLightZone(zone, enabled) {
+            lightFixtures.filter(f => f.zone === zone).forEach(f => {
+                f.light.visible = enabled;
+            });
+        }
+
+        function adjustLightIntensity(zone, val) {
+            const intensity = (parseFloat(val) / 100) * 1.5;
+            lightFixtures.filter(f => f.zone === zone).forEach(f => {
+                f.light.intensity = intensity;
+            });
+        }
+
+        function togglePhotocell(enabled) {
+            if (enabled) {
+                scene.background = new THREE.Color(0x020617);
+                renderer.toneMappingExposure = 0.5;
+            } else {
+                scene.background = new THREE.Color(0x0f172a);
+                renderer.toneMappingExposure = 1.0;
+            }
+        }
+
+        function toggleCinemaScreen() {
+            isCinemaPlaying = !isCinemaPlaying;
+            const btn = document.getElementById('btn-cinema');
+            if (isCinemaPlaying) {
+                cinemaScreenMaterial.color.setHex(0x38bdf8);
+                btn.innerText = "PAUSE TV";
+                btn.className = "px-2.5 py-1 bg-rose-600 text-white font-semibold rounded-lg hover:bg-rose-500";
+            } else {
+                cinemaScreenMaterial.color.setHex(0x0284c7);
+                btn.innerText = "PLAY TV";
+                btn.className = "px-2.5 py-1 bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-500";
+            }
+        }
+
+        function setBlindsState(open) {
+            blindsMeshes.forEach(m => m.visible = !open);
+        }
+
+        function toggleMainGate() {
+            isGateOpen = !isGateOpen;
+            const btn = document.getElementById('btn-gate-toggle');
+            const txt = document.getElementById('gate-status-text');
+
+            if (isGateOpen) {
+                slidingGateMesh.position.x = 17;
+                btn.innerText = "CLOSE GATE";
+                btn.className = "px-3 py-1.5 bg-rose-600 hover:bg-rose-500 font-bold rounded-lg text-white";
+                txt.innerText = "State: OPEN";
+            } else {
+                slidingGateMesh.position.x = 10;
+                btn.innerText = "OPEN GATE";
+                btn.className = "px-3 py-1.5 bg-blue-600 hover:bg-blue-500 font-bold rounded-lg text-white";
+                txt.innerText = "State: CLOSED";
+            }
+        }
+
+        function simulateNFCScan() {
+            const led = scene.getObjectByName("NFC_LED");
+            if (led) {
+                led.material.color.setHex(0x3b82f6); // flash blue
+                setTimeout(() => led.material.color.setHex(0x10b981), 1500);
+            }
+        }
+
+        function toggleHazardAlarm() {
+            isAlarmActive = !isAlarmActive;
+            const statusTxt = document.getElementById('alarm-status-txt');
+            const alarmIcon = document.getElementById('alarm-icon');
+
+            if (isAlarmActive) {
+                statusTxt.innerText = "ALARM TRIPPED";
+                alarmIcon.className = "fa-solid fa-triangle-exclamation text-rose-500 animate-bounce";
+                scene.background = new THREE.Color(0x450a0a);
+            } else {
+                statusTxt.innerText = "Normal";
+                alarmIcon.className = "fa-solid fa-shield-halved";
+                scene.background = new THREE.Color(0x0f172a);
+            }
+        }
+
+        function toggleIrrigation() {
+            isIrrigationActive = !isIrrigationActive;
+            const btn = document.getElementById('btn-irrigation');
+            waterParticles.forEach(p => p.visible = isIrrigationActive);
+
+            if (isIrrigationActive) {
+                btn.innerText = "STOP";
+                btn.className = "px-3 py-1.5 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-lg transition";
+            } else {
+                btn.innerText = "START";
+                btn.className = "px-3 py-1.5 bg-slate-800 hover:bg-cyan-600 text-white font-bold rounded-lg border border-slate-700 transition";
+            }
+        }
+
+        function fillWaterTank() {
+            document.getElementById('pump-status').innerText = "PUMPING...";
+            document.getElementById('pump-status').className = "text-cyan-400 animate-pulse font-bold";
+            setTimeout(() => {
+                document.getElementById('water-tank-text').innerText = "100%";
+                document.getElementById('water-live-val').innerText = "100";
+                document.getElementById('water-tank-bar').style.width = "100%";
+                document.getElementById('pump-status').innerText = "Idle";
+                document.getElementById('pump-status').className = "text-slate-200";
+            }, 2000);
+        }
+
+        function setZoneTemp(zone, val) {
+            document.getElementById(`temp-${zone}-val`).innerText = `${val}°C`;
+        }
+
+        function triggerScene(sceneMode) {
+            switch (sceneMode) {
+                case 'DEFAULT':
+                    togglePhotocell(false);
+                    setBlindsState(true);
+                    break;
+                case 'NIGHT':
+                    togglePhotocell(true);
+                    setBlindsState(false);
+                    break;
+                case 'PARTY':
+                    togglePhotocell(true);
+                    toggleCinemaScreen();
+                    break;
+                case 'AWAY':
+                    setBlindsState(false);
+                    if (isGateOpen) toggleMainGate();
+                    break;
+            }
+        }
+
+        function runGuidedTour() {
+            setFloorFilter('ALL');
+            setCameraView('OVERVIEW');
+            setTimeout(() => setCameraView('POOL'), 3000);
+            setTimeout(() => setCameraView('LIVING'), 6000);
+            setTimeout(() => setCameraView('ROOF'), 9000);
+            setTimeout(() => resetCamera(), 12000);
+        }
+
+        /* ----------------------------------------------------
+           7. MAIN ANIMATION LOOP
+        ---------------------------------------------------- */
+        function animate() {
+            requestAnimationFrame(animate);
+
+            // Controls update
+            if (controls.enabled) controls.update();
+
+            // Cinema screen pulsating color if active
+            if (isCinemaPlaying && cinemaScreenMaterial) {
+                cinemaScreenMaterial.color.setHSL((Date.now() * 0.001) % 1, 0.8, 0.5);
+            }
+
+            // Irrigation particle movement
+            if (isIrrigationActive && waterParticles.length > 0) {
+                const pos = waterParticles[0].geometry.attributes.position.array;
+                for (let i = 1; i < pos.length; i += 3) {
+                    pos[i] -= 0.05;
+                    if (pos[i] < 0) pos[i] = 2.5;
+                }
+                waterParticles[0].geometry.attributes.position.needsUpdate = true;
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        // Initialize setup on load
+        window.onload = initScene;
+    </script>
+</body>
+</html>
