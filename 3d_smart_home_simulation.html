@@ -141,6 +141,8 @@
                     <button onclick="toggleWalk()" class="cam-btn"><i class="fa-solid fa-person-walking text-lime-300"></i><span>Walkthrough</span></button>
                     <button onclick="walkTour(true)" class="cam-btn"><i class="fa-solid fa-route text-amber-300"></i><span>Room tour</span></button>
                     <button onclick="setCameraView('SHED')" class="cam-btn"><i class="fa-solid fa-warehouse text-orange-300"></i><span>Inverter shed</span></button>
+                    <button onclick="setCameraView('TAB_HALL')" class="cam-btn"><i class="fa-solid fa-tablet-screen-button text-lime-300"></i><span>Hall tablet</span></button>
+                    <button onclick="setCameraView('TAB_MASTER')" class="cam-btn"><i class="fa-solid fa-tablet-screen-button text-lime-300"></i><span>Master tablet</span></button>
                 </div>
                 <button onclick="resetCamera()" class="w-full mt-1 bg-slate-900/90 hover:bg-slate-800 p-2 rounded-xl text-xs font-semibold text-slate-300 transition border border-slate-700/50 flex items-center justify-center space-x-2">
                     <i class="fa-solid fa-rotate-left"></i><span>Reset View</span>
@@ -3107,6 +3109,7 @@ function setCameraView(view, keepFloor) {
         case 'CINEMA': setFloorFilter('BSMT', true); switchTab('cinema'); animateCameraPosition(6.9, -0.6, 0.4, -1.5, -1.7, 1.78); break;
         case 'ENTRANCE': animateCameraPosition(10, 2.4, 20, 4.5, 3.4, 7.5); break;
         case 'ROOF': animateCameraPosition(16, 22, 14, 2, 10, -1); break;
+        case 'TAB_HALL': case 'TAB_MASTER': tabletView(view); break;
         case 'SHED': case 'SHED_INV': case 'SHED_DB': case 'SHED_MAINDB': shedView(view); break;
     }
 }
@@ -3357,6 +3360,12 @@ function siteDevice(f, type, x, y, z, o = {}) {
 }
 
 /* ---------- Loxone control tablets ---------- */
+function tabletView(v) {
+    setFloorFilter('F2', true);
+    roomLabelsOn = false; const lt = document.getElementById('labels-toggle'); if (lt) lt.checked = false; refreshRoomLabels();
+    if (v === 'TAB_HALL') animateCameraPosition(1.5, 8.5, -2.9, 2.0, 8.35, -5.2);
+    else animateCameraPosition(-0.3, 8.7, 1.9, 2.43, 8.3, 0.9);
+}
 function buildTablet(f, x, y, z, rotY, key, room) {
     const dev = siteDevice(f, 'tablet', x, y, z, { room, picks: [[x, y, z, 0.34]] });
     const g = new THREE.Group(); g.position.set(0, y, 0); g.rotation.y = rotY; dev.root.add(g);
@@ -3365,6 +3374,10 @@ function buildTablet(f, x, y, z, rotY, key, room) {
     const tex = new THREE.CanvasTexture(cv);
     const screen = new THREE.Mesh(new THREE.PlaneGeometry(0.31, 0.2), new THREE.MeshBasicMaterial({ map: tex })); screen.position.z = 0.0135; g.add(screen);
     const led = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.006, 0.004), new THREE.MeshBasicMaterial({ color: LOXGREEN })); led.position.set(0, -0.113, 0.0135); g.add(led);
+    const gc = document.createElement('canvas'); gc.width = gc.height = 64; const gg = gc.getContext('2d'), gr = gg.createRadialGradient(32, 32, 2, 32, 32, 32);
+    gr.addColorStop(0, 'rgba(141,198,63,0.9)'); gr.addColorStop(1, 'rgba(141,198,63,0)'); gg.fillStyle = gr; gg.fillRect(0, 0, 64, 64);
+    const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(gc), transparent: true, opacity: 0.55, depthWrite: false, blending: THREE.AdditiveBlending }));
+    halo.scale.set(1.1, 1.1, 1); halo.position.set(0, y, 0); dev.root.add(halo);
     dev.tab = { cv, tex, key, room };
     tablets.push(dev); drawTablet(dev);
     return dev;
