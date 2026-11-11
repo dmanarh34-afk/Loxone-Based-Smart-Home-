@@ -2,7 +2,8 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#0f172a">
     <title>Plot 1 Smart Home</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -27,6 +28,51 @@
         input[type=color] { -webkit-appearance: none; border: none; width: 26px; height: 20px; padding: 0; background: none; cursor: pointer; }
         input[type=color]::-webkit-color-swatch-wrapper { padding: 0; }
         input[type=color]::-webkit-color-swatch { border: 1px solid rgba(255,255,255,0.3); border-radius: 5px; }
+        #webgl-container canvas { touch-action: none; display: block; }
+        body { -webkit-tap-highlight-color: transparent; }
+        #walk-pad { display: none; }
+        #mobile-nav { display: none; }
+        /* touch devices: bigger sliders / checkboxes */
+        @media (pointer: coarse) {
+            input[type=range] { height: 28px !important; background: transparent !important; -webkit-appearance: none; appearance: none; touch-action: pan-y; }
+            input[type=range]::-webkit-slider-runnable-track { height: 6px; border-radius: 3px; background: rgba(51,65,85,0.95); }
+            input[type=range]::-moz-range-track { height: 6px; border-radius: 3px; background: rgba(51,65,85,0.95); }
+            input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 24px; height: 24px; margin-top: -9px; border-radius: 50%; background: currentColor; border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.5); }
+            input[type=range]::-moz-range-thumb { width: 20px; height: 20px; border-radius: 50%; background: currentColor; border: 2px solid #fff; }
+            input[type=checkbox] { width: 22px !important; height: 22px !important; }
+            .cam-btn, .scene-btn, .tab-btn, .floor-btn { min-height: 44px; }
+        }
+        @media (max-width: 767px) {
+            html, body { height: 100dvh; }
+            #webgl-container { width: 100vw; height: 100dvh; }
+            #top-bar { padding: 8px 10px; margin: 8px; gap: 8px; }
+            #top-bar h1 { font-size: 0.95rem; }
+            #top-sub { display: none; }
+            #top-floors { width: 100%; flex-wrap: nowrap; overflow-x: auto; justify-content: flex-start; -webkit-overflow-scrolling: touch; }
+            #top-floors .floor-btn { flex: 0 0 auto; white-space: nowrap; }
+            #top-stats { width: 100%; overflow-x: auto; gap: 6px; }
+            #top-stats > div { flex: 0 0 auto; padding: 4px 8px; white-space: nowrap; }
+            #site-footer { display: none; }
+            #main-overlay { display: none; position: fixed; left: 0; right: 0; bottom: calc(60px + env(safe-area-inset-bottom)); top: auto; padding: 0 8px; z-index: 30; flex: none; overflow: visible; }
+            body[data-sheet="left"] #main-overlay, body[data-sheet="right"] #main-overlay { display: flex; }
+            body[data-sheet="left"] #right-panel { display: none; }
+            body[data-sheet="right"] #left-panel { display: none; }
+            #left-panel { max-height: 58dvh; overflow-y: auto; }
+            #right-panel { max-height: 58dvh !important; }
+            #mobile-nav { display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; padding: 6px 8px calc(6px + env(safe-area-inset-bottom)); gap: 6px; background: rgba(15,23,42,0.92); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-top: 1px solid rgba(255,255,255,0.1); }
+            #mobile-nav button { flex: 1; min-height: 44px; border-radius: 12px; font-size: 12px; font-weight: 600; color: #cbd5e1; background: rgba(30,41,59,0.8); border: 1px solid rgba(71,85,105,0.5); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; }
+            #mobile-nav button.on { background: #059669; color: #fff; border-color: #10b981; }
+            body.walking #top-bar, body.walking #mobile-nav { display: none; }
+            body.walking #walk-hud { bottom: auto; top: calc(8px + env(safe-area-inset-top)); padding: 8px 10px; }
+            body.walking #walk-keys { display: none; }
+            body.walking #walk-pad { display: block; }
+            #walk-hud { z-index: 25; }
+        }
+        #walk-pad { position: fixed; inset: 0; z-index: 22; pointer-events: none; }
+        #joy-base { position: absolute; left: calc(24px + env(safe-area-inset-left)); bottom: calc(28px + env(safe-area-inset-bottom)); width: 130px; height: 130px; border-radius: 50%; background: rgba(15,23,42,0.45); border: 2px solid rgba(255,255,255,0.25); pointer-events: auto; touch-action: none; }
+        #joy-knob { position: absolute; left: 50%; top: 50%; width: 56px; height: 56px; margin: -28px 0 0 -28px; border-radius: 50%; background: rgba(255,255,255,0.5); border: 2px solid rgba(255,255,255,0.8); pointer-events: none; }
+        #walk-floorpad { position: absolute; right: calc(20px + env(safe-area-inset-right)); bottom: calc(40px + env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 10px; pointer-events: auto; }
+        #walk-floorpad button { width: 52px; height: 52px; border-radius: 50%; background: rgba(15,23,42,0.6); border: 2px solid rgba(255,255,255,0.3); color: #fff; font-size: 18px; touch-action: manipulation; }
     </style>
 </head>
 <body class="w-full h-screen overflow-hidden flex flex-col justify-between">
@@ -36,18 +82,18 @@
     <div id="tooltip" class="glass-panel rounded-xl p-3 text-xs"></div>
 
     <!-- HEADER -->
-    <header class="relative z-10 p-4 flex flex-col md:flex-row justify-between items-center glass-panel m-3 rounded-2xl gap-3">
+    <header id="top-bar" class="relative z-10 p-4 flex flex-col md:flex-row justify-between items-center glass-panel m-3 rounded-2xl gap-3">
         <div class="flex items-center space-x-3">
             <div class="bg-emerald-600 p-2.5 rounded-xl text-white shadow-lg shadow-emerald-500/30">
                 <i class="fa-solid fa-house-signal text-xl"></i>
             </div>
             <div>
                 <h1 class="font-bold text-lg leading-tight tracking-wide text-white">Plot 1 - Glenshire Hills</h1>
-                <p class="text-xs text-slate-400 font-medium">Client: <span class="text-emerald-400">Mr. Cecil Anertey Abbey</span> · Loxone layout by IBS (SM-WR-2026)</p>
+                <p id="top-sub" class="text-xs text-slate-400 font-medium">Client: <span class="text-emerald-400">Mr. Cecil Anertey Abbey</span> · Loxone layout by IBS (SM-WR-2026)</p>
             </div>
         </div>
 
-        <div class="flex items-center bg-slate-900/80 p-1.5 rounded-xl border border-slate-700/50 flex-wrap justify-center gap-1">
+        <div id="top-floors" class="flex items-center bg-slate-900/80 p-1.5 rounded-xl border border-slate-700/50 flex-wrap justify-center gap-1">
             <span class="text-xs font-semibold px-2 text-slate-400 uppercase tracking-wider hidden sm:inline">Floors:</span>
             <button onclick="setFloorFilter('ALL')" id="btn-floor-ALL" class="floor-btn">All</button>
             <button onclick="setFloorFilter('ROOF')" id="btn-floor-ROOF" class="floor-btn">Roof</button>
@@ -57,7 +103,7 @@
             <button onclick="setFloorFilter('BSMT')" id="btn-floor-BSMT" class="floor-btn">Basement</button>
         </div>
 
-        <div class="flex items-center space-x-3 text-xs font-medium">
+        <div id="top-stats" class="flex items-center space-x-3 text-xs font-medium">
             <div class="flex items-center space-x-1.5 text-amber-300 bg-amber-950/50 px-3 py-1.5 rounded-lg border border-amber-800/40">
                 <i class="fa-solid fa-microchip"></i><span><strong id="device-total">0</strong> Loxone devices</span>
             </div>
@@ -77,7 +123,7 @@
     <div id="main-overlay" class="relative z-10 flex-1 flex flex-col md:flex-row justify-between pointer-events-none p-3 gap-3 overflow-hidden">
 
         <!-- LEFT -->
-        <div class="w-full md:w-64 flex flex-col gap-3 pointer-events-auto">
+        <div id="left-panel" class="w-full md:w-64 flex flex-col gap-3 pointer-events-auto">
             <div class="glass-panel p-3.5 rounded-2xl flex flex-col gap-2">
                 <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400"><i class="fa-solid fa-video mr-1.5"></i> Camera Presets</h3>
                 <div class="grid grid-cols-2 gap-2 text-xs">
@@ -112,7 +158,7 @@
         </div>
 
         <!-- RIGHT DASHBOARD -->
-        <div class="w-full md:w-96 glass-panel rounded-2xl flex flex-col pointer-events-auto overflow-hidden max-h-[75vh]">
+        <div id="right-panel" class="w-full md:w-96 glass-panel rounded-2xl flex flex-col pointer-events-auto overflow-hidden max-h-[75vh]">
             <div class="flex border-b border-slate-700/60 bg-slate-900/60 text-xs font-bold">
                 <button onclick="switchTab('devices')" id="tab-btn-devices" class="tab-btn"><i class="fa-solid fa-microchip text-base"></i><span>Devices</span></button>
                 <button onclick="switchTab('lighting')" id="tab-btn-lighting" class="tab-btn"><i class="fa-solid fa-lightbulb text-base"></i><span>Light & Audio</span></button>
@@ -472,7 +518,7 @@
     <div id="walk-cross" class="hidden fixed z-20 left-1/2 top-1/2 w-1.5 h-1.5 -ml-[3px] -mt-[3px] rounded-full bg-white/80 pointer-events-none"></div>
     <div id="walk-hud" class="hidden fixed z-20 left-1/2 -translate-x-1/2 bottom-16 glass-panel rounded-2xl px-4 py-3 text-xs text-slate-200 flex flex-col items-center gap-2 max-w-[92vw]">
         <div class="text-sm"><i class="fa-solid fa-person-walking text-lime-300 mr-1"></i><strong id="walk-room">Walkthrough</strong> <span class="text-slate-400">· <span id="walk-floor"></span></span></div>
-        <div class="text-slate-400 text-center">Click the view to look around · <b>W A S D</b> / arrows move · <b>Shift</b> run · <b>Q</b> / <b>E</b> floor down / up · <b>N</b> next room · <b>B</b> previous · <b>Esc</b> exit</div>
+        <div id="walk-keys" class="text-slate-400 text-center">Click the view to look around · <b>W A S D</b> / arrows move · <b>Shift</b> run · <b>Q</b> / <b>E</b> floor down / up · <b>N</b> next room · <b>B</b> previous · <b>Esc</b> exit</div>
         <div class="flex gap-2 flex-wrap justify-center">
             <button onclick="walkTour(true)" class="px-2.5 py-1 rounded-lg bg-amber-600/80 hover:bg-amber-500 text-white font-semibold"><i class="fa-solid fa-route mr-1"></i>Tour all rooms</button>
             <button onclick="walkStep(-1)" class="px-2.5 py-1 rounded-lg bg-slate-800 border border-slate-700 hover:bg-slate-700">◀ Prev room</button>
@@ -481,7 +527,7 @@
         </div>
     </div>
 
-    <footer class="relative z-10 p-2.5 glass-panel m-3 rounded-xl flex flex-col md:flex-row justify-between items-center text-xs text-slate-400">
+    <footer id="site-footer" class="relative z-10 p-2.5 glass-panel m-3 rounded-xl flex flex-col md:flex-row justify-between items-center text-xs text-slate-400">
         <div class="flex items-center space-x-4">
             <span><i class="fa-solid fa-location-dot text-emerald-400 mr-1"></i> Glenshire Hills, Plot 1</span>
             <span class="hidden sm:inline">|</span>
@@ -489,6 +535,22 @@
         </div>
         <div id="cctv-hud-status" class="font-semibold text-emerald-400 mt-1 md:mt-0"><i class="fa-solid fa-video mr-1"></i> Orbit Camera Control Active</div>
     </footer>
+
+    <!-- MOBILE NAV -->
+    <nav id="mobile-nav">
+        <button id="mnav-left" onclick="mobileSheet('left')"><i class="fa-solid fa-video"></i><span>Views</span></button>
+        <button id="mnav-right" onclick="mobileSheet('right')"><i class="fa-solid fa-sliders"></i><span>Controls</span></button>
+        <button onclick="mobileSheet(''); toggleWalk(true)"><i class="fa-solid fa-person-walking"></i><span>Walk</span></button>
+        <button onclick="mobileSheet(''); resetCamera()"><i class="fa-solid fa-rotate-left"></i><span>Reset</span></button>
+    </nav>
+    <!-- WALK TOUCH PAD -->
+    <div id="walk-pad">
+        <div id="joy-base"><div id="joy-knob"></div></div>
+        <div id="walk-floorpad">
+            <button onclick="walkFloorStep(1)" aria-label="Floor up"><i class="fa-solid fa-arrow-up"></i></button>
+            <button onclick="walkFloorStep(-1)" aria-label="Floor down"><i class="fa-solid fa-arrow-down"></i></button>
+        </div>
+    </div>
 
 <script>
 /* =====================================================================
@@ -1637,7 +1699,7 @@ const WALK_START = { // where you arrive on each floor (stair landings / entranc
     BSMT: { x: 4.35, z: -1.75, yaw: 2.4 }, GF: { f: 'GF', ix: 680, iy: 660, yaw: 0 },
     F1: { f: 'F1', ix: 1060, iy: 880, yaw: Math.PI / 2 }, F2: { f: 'F2', ix: 350, iy: 540, yaw: Math.PI / 2 }
 };
-const walk = { active: false, floor: 'GF', pos: new THREE.Vector3(), yaw: 0, pitch: 0, keys: {}, colliders: {}, tour: null, drag: null };
+const walk = { active: false, floor: 'GF', pos: new THREE.Vector3(), yaw: 0, pitch: 0, keys: {}, colliders: {}, tour: null, drag: null, joy: { x: 0, y: 0 } };
 const walkRay = new THREE.Raycaster();
 const EYE = 1.6;
 
@@ -1673,6 +1735,7 @@ function toggleWalk(on = !walk.active) {
     walk.active = on;
     document.getElementById('walk-hud').classList.toggle('hidden', !on);
     document.getElementById('walk-cross').classList.toggle('hidden', !on);
+    document.body.classList.toggle('walking', on); walk.joy.x = walk.joy.y = 0; if (on) mobileSheet('');
     document.getElementById('main-overlay').classList.toggle('invisible', on); // full view while walking
     Object.values(zones).forEach(z => { z.coneMat.visible = !on; }); // light-cone visuals wash out an eye-level view
     if (on) {
@@ -1706,13 +1769,14 @@ function walkStep(d) {
     document.getElementById('walk-room').innerText = `${r.name}  (${T.i + 1}/${T.list.length})`;
 }
 function updateWalk(dt) {
-    const k = walk.keys, run = k.shift ? 4.2 : 2.0;
-    let mx = (k.d ? 1 : 0) - (k.a ? 1 : 0), mz = (k.w ? 1 : 0) - (k.s ? 1 : 0);
+    const k = walk.keys, J = walk.joy, jm = Math.hypot(J.x, J.y), run = (k.shift || jm > 0.92) ? 4.2 : 2.0;
+    let mx = (k.d ? 1 : 0) - (k.a ? 1 : 0) + J.x, mz = (k.w ? 1 : 0) - (k.s ? 1 : 0) - J.y;
+    const mag = Math.min(1, Math.hypot(mx, mz));
     if ((mx || mz) && walk.tour) { walk.tour.auto = false; walk.tour.glide = null; walk.tour.pan = null; }
     if (mx || mz) {
         const len = Math.hypot(mx, mz); mx /= len; mz /= len;
         const fx = -Math.sin(walk.yaw), fz = -Math.cos(walk.yaw), rx = Math.cos(walk.yaw), rz = -Math.sin(walk.yaw);
-        const dx = (fx * mz + rx * mx) * run * dt, dz = (fz * mz + rz * mx) * run * dt;
+        const dx = (fx * mz + rx * mx) * run * dt * mag, dz = (fz * mz + rz * mx) * run * dt * mag;
         const blocked = (x, z) => {
             const l = Math.hypot(x, z); if (!l) return false;
             walkRay.set(new THREE.Vector3(walk.pos.x, LEVEL[walk.floor] + 0.9, walk.pos.z), new THREE.Vector3(x / l, 0, z / l));
@@ -1752,6 +1816,16 @@ function walkKey(e, down) {
     else if (key === 'b') walkStep(-1);
     else if (key === 'escape' && !document.pointerLockElement) toggleWalk(false);
 }
+function walkFloorStep(d) {
+    const i = WALK_FLOORS.indexOf(walk.floor) + d;
+    if (i >= 0 && i < WALK_FLOORS.length) { walk.tour = null; setWalkFloor(WALK_FLOORS[i]); }
+}
+function mobileSheet(name) {
+    const cur = document.body.dataset.sheet || '';
+    const next = (name && name === cur) ? '' : name;
+    document.body.dataset.sheet = next;
+    ['left', 'right'].forEach(n => { const b = document.getElementById('mnav-' + n); if (b) b.classList.toggle('on', next === n); });
+}
 function walkLook(dx, dy) {
     walk.yaw -= dx * 0.0022; walk.pitch = Math.max(-1.3, Math.min(1.3, walk.pitch - dy * 0.0022));
     if (walk.tour) { walk.tour.pan = null; walk.tour.auto = false; }
@@ -1764,9 +1838,24 @@ function setupWalkInput() {
     el.addEventListener('click', () => { if (walk.active && !document.pointerLockElement && el.requestPointerLock) el.requestPointerLock(); });
     document.addEventListener('mousemove', e => { if (walk.active && document.pointerLockElement === el) walkLook(e.movementX, e.movementY); });
     // drag-to-look fallback (touch / no pointer lock)
-    el.addEventListener('pointerdown', e => { if (walk.active && !document.pointerLockElement) walk.drag = { x: e.clientX, y: e.clientY }; });
-    window.addEventListener('pointermove', e => { if (walk.drag) { walkLook(e.clientX - walk.drag.x, e.clientY - walk.drag.y); walk.drag = { x: e.clientX, y: e.clientY }; } });
-    window.addEventListener('pointerup', () => { walk.drag = null; });
+    el.addEventListener('pointerdown', e => { if (walk.active && !document.pointerLockElement && !walk.drag) walk.drag = { x: e.clientX, y: e.clientY, id: e.pointerId }; });
+    window.addEventListener('pointermove', e => { if (walk.drag && walk.drag.id === e.pointerId) { const k = e.pointerType === 'touch' ? 1.6 : 1; walkLook((e.clientX - walk.drag.x) * k, (e.clientY - walk.drag.y) * k); walk.drag.x = e.clientX; walk.drag.y = e.clientY; } });
+    const endDrag = e => { if (walk.drag && walk.drag.id === e.pointerId) walk.drag = null; };
+    window.addEventListener('pointerup', endDrag); window.addEventListener('pointercancel', endDrag);
+    // on-screen joystick (touch walk)
+    const base = document.getElementById('joy-base'), knob = document.getElementById('joy-knob'); let jid = null;
+    const joyMove = e => {
+        const r = base.getBoundingClientRect(), R = r.width / 2;
+        let dx = e.clientX - (r.left + R), dy = e.clientY - (r.top + R); const l = Math.hypot(dx, dy);
+        if (l > R) { dx *= R / l; dy *= R / l; }
+        walk.joy.x = dx / R; walk.joy.y = dy / R;
+        knob.style.transform = "translate(" + dx + "px, " + dy + "px)";
+        if (walk.tour) { walk.tour.auto = false; walk.tour.glide = null; walk.tour.pan = null; }
+    };
+    const joyEnd = e => { if (e.pointerId !== jid) return; jid = null; walk.joy.x = walk.joy.y = 0; knob.style.transform = ''; };
+    base.addEventListener('pointerdown', e => { jid = e.pointerId; base.setPointerCapture(e.pointerId); joyMove(e); e.preventDefault(); });
+    base.addEventListener('pointermove', e => { if (e.pointerId === jid) joyMove(e); });
+    base.addEventListener('pointerup', joyEnd); base.addEventListener('pointercancel', joyEnd);
 }
 
 /* =====================================================================
@@ -2253,7 +2342,8 @@ function initScene() {
     camera = new THREE.PerspectiveCamera(42, window.innerWidth / window.innerHeight, 0.2, 600);
     renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
     renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+    const IS_TOUCH = window.matchMedia('(pointer: coarse)').matches || window.innerWidth < 768;
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, IS_TOUCH ? 1.25 : 1.5));
     renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFShadowMap;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     container.appendChild(renderer.domElement);
@@ -2264,7 +2354,7 @@ function initScene() {
 
     hemiLight = new THREE.HemisphereLight(0xbcd3ef, 0x6b5a45, 0.5); scene.add(hemiLight);
     sunLight = new THREE.DirectionalLight(0xffc58a, 0.6);
-    sunLight.castShadow = true; sunLight.shadow.mapSize.set(2048, 2048);
+    sunLight.castShadow = true; sunLight.shadow.mapSize.set(IS_TOUCH ? 1024 : 2048, IS_TOUCH ? 1024 : 2048);
     Object.assign(sunLight.shadow.camera, { near: 1, far: 200, left: -35, right: 35, top: 35, bottom: -35 });
     sunLight.shadow.bias = -0.0005; sunLight.shadow.camera.updateProjectionMatrix(); scene.add(sunLight, sunLight.target);
 
@@ -2275,7 +2365,9 @@ function initScene() {
     raycaster = new THREE.Raycaster();
     renderer.domElement.addEventListener('pointermove', onPointerMove);
     renderer.domElement.addEventListener('pointerleave', () => { hovered = null; tooltip.style.display = 'none'; });
-    renderer.domElement.addEventListener('pointerdown', e => { downAt = { x: e.clientX, y: e.clientY }; });
+    renderer.domElement.addEventListener('pointerdown', e => { downAt = { x: e.clientX, y: e.clientY }; if (e.pointerType !== 'mouse') onPointerMove(e); });
+    renderer.domElement.addEventListener('pointerup', e => { if (e.pointerType !== 'mouse') setTimeout(() => { hovered = null; tooltip.style.display = 'none'; }, 2500); });
+    document.getElementById('left-panel').addEventListener('click', e => { const b = e.target.closest('button'); const oc = (b && b.getAttribute('onclick')) || ''; if (/setCameraView|resetCamera/.test(oc)) mobileSheet(''); });
     renderer.domElement.addEventListener('click', onClick);
     window.addEventListener('resize', onWindowResize);
     setupWalkInput();
@@ -3077,7 +3169,7 @@ function updateTooltip() {
         <div class="text-slate-400 mt-1">${t.desc}</div>
         <div class="mt-1 font-semibold text-emerald-300">${deviceState(d)}</div>`;
     tooltip.style.display = 'block';
-    tooltip.style.left = Math.min(lastPointer.x + 16, window.innerWidth - 270) + 'px';
+    tooltip.style.left = Math.max(8, Math.min(lastPointer.x + 16, window.innerWidth - 270)) + 'px';
     tooltip.style.top = Math.min(lastPointer.y + 16, window.innerHeight - 130) + 'px';
 }
 let downAt = { x: 0, y: 0 };
