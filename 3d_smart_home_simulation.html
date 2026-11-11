@@ -31,6 +31,10 @@
         #webgl-container canvas { touch-action: none; display: block; }
         body { -webkit-tap-highlight-color: transparent; }
         #walk-pad { display: none; }
+        .tb-btn { padding: 8px 6px; border-radius: 10px; font-weight: 700; font-size: 11px; background: #1e293b; border: 1px solid #334155; color: #e2e8f0; min-height: 40px; line-height: 1.2; }
+        .tb-btn.on { background: #059669; border-color: #10b981; color: #fff; }
+        .tb-btn:active { transform: scale(0.97); }
+        #walk-use { position: fixed; left: 50%; transform: translateX(-50%); bottom: 210px; z-index: 26; }
         #mobile-nav { display: none; }
         /* touch devices: bigger sliders / checkboxes */
         @media (pointer: coarse) {
@@ -136,6 +140,7 @@
                     <button onclick="setCameraView('ROOF')" class="cam-btn"><i class="fa-solid fa-solar-panel text-emerald-400"></i><span>Roof</span></button>
                     <button onclick="toggleWalk()" class="cam-btn"><i class="fa-solid fa-person-walking text-lime-300"></i><span>Walkthrough</span></button>
                     <button onclick="walkTour(true)" class="cam-btn"><i class="fa-solid fa-route text-amber-300"></i><span>Room tour</span></button>
+                    <button onclick="setCameraView('SHED')" class="cam-btn"><i class="fa-solid fa-warehouse text-orange-300"></i><span>Inverter shed</span></button>
                 </div>
                 <button onclick="resetCamera()" class="w-full mt-1 bg-slate-900/90 hover:bg-slate-800 p-2 rounded-xl text-xs font-semibold text-slate-300 transition border border-slate-700/50 flex items-center justify-center space-x-2">
                     <i class="fa-solid fa-rotate-left"></i><span>Reset View</span>
@@ -151,6 +156,9 @@
                     <button onclick="triggerScene('PARTY')" class="scene-btn"><i class="fa-solid fa-champagne-glasses text-rose-400 mr-1"></i> Party</button>
                     <button onclick="triggerScene('AWAY')" class="scene-btn col-span-2"><i class="fa-solid fa-user-lock text-emerald-400 mr-1"></i> Away (presence armed)</button>
                 </div>
+                <button onclick="startExperienceTour()" class="w-full mt-1 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 p-2.5 rounded-xl text-xs font-bold text-white transition shadow-lg shadow-amber-500/20 flex items-center justify-center space-x-2">
+                    <i class="fa-solid fa-wand-magic-sparkles"></i><span>Digital Experience Tour</span>
+                </button>
                 <button onclick="runGuidedTour()" class="w-full mt-1 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 p-2.5 rounded-xl text-xs font-bold text-white transition shadow-lg shadow-emerald-500/20 flex items-center justify-center space-x-2">
                     <i class="fa-solid fa-circle-play"></i><span>Guided Device Tour</span>
                 </button>
@@ -463,18 +471,41 @@
                 <div id="tab-content-energy" class="tab-content hidden space-y-4">
                     <div class="glass-card p-3.5 rounded-xl space-y-3">
                         <div class="flex justify-between items-center">
+                            <span class="font-bold text-slate-200"><i class="fa-solid fa-warehouse text-amber-400 text-lg mr-2"></i>Inverter &amp; DB shed</span>
+                            <span class="text-slate-400 font-bold text-sm" id="shed-door-status">Door closed</span>
+                        </div>
+                        <p class="text-[11px] text-slate-400">Hybrid solar inverter, battery, the Loxone board and the main board. Open the door and the boards to inspect them.</p>
+                        <div class="grid grid-cols-2 gap-2">
+                            <button onclick="setCameraView('SHED')" class="tb-btn">Outside view</button>
+                            <button onclick="shedDoor()" id="btn-shed-door" class="tb-btn">Open door</button>
+                            <button onclick="setCameraView('SHED_INV')" class="tb-btn">Inverter &amp; battery</button>
+                            <button onclick="setShedRoof(!SHED.roof.visible)" id="btn-shed-roof" class="tb-btn">Roof cut-away</button>
+                            <button onclick="dbDoor('lox')" id="btn-shed-lox" class="tb-btn">Open Loxone DB</button>
+                            <button onclick="dbDoor('main')" id="btn-shed-main" class="tb-btn">Open main DB</button>
+                            <button onclick="setCameraView('SHED_DB')" class="tb-btn">View Loxone DB</button>
+                            <button onclick="setCameraView('SHED_MAINDB')" class="tb-btn">View main DB</button>
+                        </div>
+                        <div class="grid grid-cols-4 gap-1 text-center text-[10px] text-slate-400 border-t border-slate-700/50 pt-2">
+                            <div>PV<br><strong id="shed-pv" class="text-amber-300 text-xs">4.8 kW</strong></div>
+                            <div>Load<br><strong id="shed-load" class="text-slate-200 text-xs">1.2 kW</strong></div>
+                            <div>Battery<br><strong id="shed-bat" class="text-emerald-300 text-xs">92%</strong></div>
+                            <div>Grid<br><strong id="shed-grid" class="text-slate-200 text-xs">0.0 kW</strong></div>
+                        </div>
+                    </div>
+                    <div class="glass-card p-3.5 rounded-xl space-y-3">
+                        <div class="flex justify-between items-center">
                             <span class="font-bold text-slate-200"><i class="fa-solid fa-solar-panel text-emerald-400 text-lg mr-2"></i>Solar PV array</span>
                             <span class="text-emerald-400 font-bold text-sm" id="solar-gen-text">4.8 kW</span>
                         </div>
                         <div class="w-full bg-slate-800 h-2 rounded-full overflow-hidden"><div id="solar-bar" class="bg-emerald-500 h-full rounded-full transition-all" style="width: 75%;"></div></div>
-                        <div class="flex justify-between text-[11px] text-slate-400"><span>Inverter: Active</span><span>Battery: 92%</span></div>
+                        <div class="flex justify-between text-[11px] text-slate-400"><span>Inverter: Active</span><span id="battery-pct">Battery: 92%</span></div>
                     </div>
                     <div class="glass-card p-3.5 rounded-xl space-y-3">
                         <div class="flex justify-between items-center">
                             <span class="font-bold text-slate-200"><i class="fa-solid fa-charging-station text-lime-400 text-lg mr-2"></i>Loxone Wallbox</span>
                             <span class="text-slate-400 font-bold text-sm" id="ev-charger-status">Idle</span>
                         </div>
-                        <p class="text-[11px] text-slate-400">Smart AC charging · up to 11 kW · simulated controls</p>
+                        <p class="text-[11px] text-slate-400">Loxone device: the Miniserver, the tablets and this panel all control it · up to 11 kW</p>
                         <div class="grid grid-cols-2 gap-2">
                             <button onclick="setEvChargeMode('solar')" id="ev-mode-solar" class="px-2 py-1.5 rounded-lg border text-[11px] font-bold transition">PV SURPLUS</button>
                             <button onclick="setEvChargeMode('fast')" id="ev-mode-fast" class="px-2 py-1.5 rounded-lg border text-[11px] font-bold transition">FAST CHARGE</button>
@@ -515,10 +546,36 @@
         </div>
     </div>
 
+    <!-- LOXONE TABLET UI -->
+    <div id="tablet-ui" class="hidden fixed z-[60] inset-x-0 bottom-0 md:inset-x-auto md:right-4 md:bottom-4 md:w-[26rem] max-h-[86dvh] flex flex-col rounded-t-3xl md:rounded-3xl border-2 border-slate-600 bg-slate-950/95 backdrop-blur shadow-2xl text-xs text-slate-200">
+        <div class="flex items-center justify-between px-4 py-3 border-b border-slate-800">
+            <div><span class="font-extrabold text-lg" style="color:#8dc63f">loxone</span><span id="tab-room" class="ml-2 text-slate-300 font-semibold"></span></div>
+            <div class="flex items-center gap-3"><span id="tab-clock" class="font-bold text-slate-300"></span>
+                <button onclick="closeTablet()" class="w-9 h-9 rounded-full bg-slate-800 hover:bg-slate-700" aria-label="Close"><i class="fa-solid fa-xmark"></i></button></div>
+        </div>
+        <div id="tab-body" class="overflow-y-auto p-3 space-y-3"></div>
+        <div id="tab-toast" class="px-4 py-2 border-t border-slate-800 text-[11px] text-emerald-300 min-h-[2.25rem]"></div>
+    </div>
+    <!-- EXPERIENCE TOUR CARD -->
+    <div id="xp-card" class="hidden fixed z-[55] left-1/2 -translate-x-1/2 bottom-[76px] md:bottom-16 w-[min(94vw,560px)] glass-panel rounded-2xl p-4 text-xs">
+        <div class="flex items-center justify-between gap-2 mb-1.5">
+            <div class="flex items-center gap-2 min-w-0"><span id="xp-step" class="px-2 py-0.5 rounded-full bg-amber-500 text-slate-950 font-bold shrink-0"></span><strong id="xp-title" class="text-sm text-white truncate"></strong></div>
+            <button onclick="stopExperienceTour()" class="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 shrink-0" aria-label="End tour"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <p id="xp-text" class="text-slate-300 leading-relaxed"></p>
+        <div class="mt-3 h-1 bg-slate-800 rounded"><div id="xp-bar" class="h-1 bg-amber-500 rounded transition-all" style="width:0%"></div></div>
+        <div class="mt-3 flex gap-2 justify-center">
+            <button onclick="xpGo(xp.i - 1)" class="tb-btn w-14" aria-label="Previous"><i class="fa-solid fa-backward-step"></i></button>
+            <button onclick="xpToggle()" id="xp-play" class="tb-btn w-14" aria-label="Play or pause"><i class="fa-solid fa-pause"></i></button>
+            <button onclick="xpGo(xp.i + 1)" class="tb-btn w-14" aria-label="Next"><i class="fa-solid fa-forward-step"></i></button>
+        </div>
+    </div>
+    <button id="walk-use" class="hidden tb-btn on px-4" onclick="openTablet(this._dev)"><i class="fa-solid fa-tablet-screen-button mr-1.5"></i>Use Loxone tablet</button>
+
     <div id="walk-cross" class="hidden fixed z-20 left-1/2 top-1/2 w-1.5 h-1.5 -ml-[3px] -mt-[3px] rounded-full bg-white/80 pointer-events-none"></div>
     <div id="walk-hud" class="hidden fixed z-20 left-1/2 -translate-x-1/2 bottom-16 glass-panel rounded-2xl px-4 py-3 text-xs text-slate-200 flex flex-col items-center gap-2 max-w-[92vw]">
         <div class="text-sm"><i class="fa-solid fa-person-walking text-lime-300 mr-1"></i><strong id="walk-room">Walkthrough</strong> <span class="text-slate-400">· <span id="walk-floor"></span></span></div>
-        <div id="walk-keys" class="text-slate-400 text-center">Click the view to look around · <b>W A S D</b> / arrows move · <b>Shift</b> run · <b>Q</b> / <b>E</b> floor down / up · <b>N</b> next room · <b>B</b> previous · <b>Esc</b> exit</div>
+        <div id="walk-keys" class="text-slate-400 text-center">Click the view to look around · <b>W A S D</b> / arrows move · <b>Shift</b> run · <b>Q</b> / <b>E</b> floor down / up · <b>N</b> next room · <b>B</b> previous · <b>F</b> use tablet · <b>Esc</b> exit</div>
         <div class="flex gap-2 flex-wrap justify-center">
             <button onclick="walkTour(true)" class="px-2.5 py-1 rounded-lg bg-amber-600/80 hover:bg-amber-500 text-white font-semibold"><i class="fa-solid fa-route mr-1"></i>Tour all rooms</button>
             <button onclick="walkStep(-1)" class="px-2.5 py-1 rounded-lg bg-slate-800 border border-slate-700 hover:bg-slate-700">◀ Prev room</button>
@@ -541,6 +598,7 @@
         <button id="mnav-left" onclick="mobileSheet('left')"><i class="fa-solid fa-video"></i><span>Views</span></button>
         <button id="mnav-right" onclick="mobileSheet('right')"><i class="fa-solid fa-sliders"></i><span>Controls</span></button>
         <button onclick="mobileSheet(''); toggleWalk(true)"><i class="fa-solid fa-person-walking"></i><span>Walk</span></button>
+        <button onclick="mobileSheet(''); startExperienceTour()"><i class="fa-solid fa-wand-magic-sparkles"></i><span>Tour</span></button>
         <button onclick="mobileSheet(''); resetCamera()"><i class="fa-solid fa-rotate-left"></i><span>Reset</span></button>
     </nav>
     <!-- WALK TOUCH PAD -->
@@ -630,9 +688,14 @@ const TYPE = {
     nano:     { name: 'Nano 2 Relay',             color: '#06b6d4', letter: 'N', desc: 'Small relay module for switching loads.' },
     display:  { name: '10" Wall Display',         color: '#b5b04a', letter: 'W', desc: 'Wall-mounted touch display.', wallH: 1.45 },
     pendant:  { name: 'Pendulum Slim',            color: '#f87171', letter: 'Pd', desc: 'Pendant light over the dining table.' },
-    unknown:  { name: 'Unlisted (purple bar)',    color: '#9333ea', letter: '?', desc: 'Symbol not in the IBS legend - confirm with designer.', wallH: 1.4 }
+    unknown:  { name: 'Unlisted (purple bar)',    color: '#9333ea', letter: '?', desc: 'Symbol not in the IBS legend - confirm with designer.', wallH: 1.4 },
+    tablet:     { name: 'Loxone Control Tablet',     color: '#8dc63f', letter: 'Tb', desc: 'Wall tablet: scenes, lights, blinds, music, gate, EV charger. Tap to open.' },
+    evcharger:  { name: 'Loxone Wallbox (EV)',       color: '#84cc16', letter: 'EV', desc: 'EV charger on the Loxone Miniserver: PV-surplus or fast charge. Tap to start/stop.' },
+    inverter:   { name: 'Solar Hybrid Inverter',     color: '#facc15', letter: 'In', desc: 'Inverter + battery in the shed, reports to the Miniserver. Tap for the inside view.' },
+    miniserver: { name: 'Loxone Miniserver + DB',    color: '#a3e635', letter: 'Ms', desc: 'Loxone distribution board in the shed. Tap to open the door.' },
+    db:         { name: 'Main Distribution Board',   color: '#fb923c', letter: 'DB', desc: 'Main DB in the shed. Tap to open the door.' }
 };
-const TYPE_ORDER = ['spot','speaker','presence','smoke','rgbw','dimmer','tpf','nano','display','pendant','unknown'];
+const TYPE_ORDER = ['spot','speaker','presence','smoke','rgbw','dimmer','tpf','nano','display','pendant','unknown','tablet','evcharger','inverter','miniserver','db'];
 
 function bsmtSpots() {
     const cols = [[280,[228,440,700,970]],[595,[222,447,707,970]],[920,[222,445,712,970]],[1255,[212,449,717,973]]];
@@ -1814,6 +1877,7 @@ function walkKey(e, down) {
     if (key === 'q' || key === 'e') { const i = WALK_FLOORS.indexOf(walk.floor) + (key === 'e' ? 1 : -1); if (i >= 0 && i < WALK_FLOORS.length) { walk.tour = null; setWalkFloor(WALK_FLOORS[i]); } }
     else if (key === 'n' || key === ' ') { walkStep(1); e.preventDefault(); }
     else if (key === 'b') walkStep(-1);
+    else if (key === 'f') { const t = nearTablet(); if (t) openTablet(t); }
     else if (key === 'escape' && !document.pointerLockElement) toggleWalk(false);
 }
 function walkFloorStep(d) {
@@ -2007,7 +2071,7 @@ function buildSite() {
     box(8, 0.1, 0.1, MAT.frame, 0, 2.0, 0, slidingGate); box(8, 0.1, 0.1, MAT.frame, 0, 0.1, 0, slidingGate);
     slidingGate.position.set(6, 0, zf + 0.3); siteGroup.add(slidingGate);
     for (let i = 0; i < 6; i++) { // bollard lights along drive (west row kept clear of the carport bays)
-        const b = box(0.15, 0.7, 0.15, MAT.dark, i % 2 ? 10.5 : -7.6, 0.35, 12 + Math.floor(i / 2) * 4, siteGroup);
+        const b = box(0.15, 0.7, 0.15, MAT.dark, i % 2 ? 10.5 : -2.9, 0.35, 12 + Math.floor(i / 2) * 4, siteGroup);
         const cap = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.08, 0.16), MAT.extGlow); cap.position.set(b.position.x, 0.62, b.position.z); siteGroup.add(cap);
     }
 
@@ -2018,19 +2082,19 @@ function buildSite() {
     const v = new THREE.Mesh(new THREE.CylinderGeometry(1.0, 0.5, 2.95, 4, 1), MAT.carved);
     v.rotation.y = Math.PI / 4; v.scale.set(0.5, 1, 0.5); v.position.set(-1.0, 1.47, 2.1); v.castShadow = true; cp.add(v); // between the two bays
     for (let i = 0; i < 4; i++) { const d = new THREE.Mesh(new THREE.CircleGeometry(0.08, 16), MAT.extGlow); d.rotation.x = Math.PI / 2; d.position.set(-3 + i * 2, 2.93, -0.8); cp.add(d); }
-    cp.position.set(-12, 0, 16.5); cp.rotation.y = 0.0; siteGroup.add(cp);
-    const cpl = new THREE.PointLight(0xffc27a, 1.0, 9, 1.2); cpl.position.set(-12, 2.6, 16.5); siteGroup.add(cpl); extLights.push({ light: cpl, base: 1.0 });
+    cp.position.set(-8, 0, 16.5); cp.rotation.y = 0.0; siteGroup.add(cp);
+    const cpl = new THREE.PointLight(0xffc27a, 1.0, 9, 1.2); cpl.position.set(-8, 2.6, 16.5); siteGroup.add(cpl); extLights.push({ light: cpl, base: 1.0 });
     // parking: everything parks on paving - carport pad (2 bays + EV charger, apron to the drive) and a
     // 2-bay guest pad off the east of the drive; kerbs where the paving meets the lawn
     const padConc = new THREE.MeshStandardMaterial({ map: TEX.travertine, color: 0x9d988f, roughness: 0.85 });
     const padAsph = new THREE.MeshStandardMaterial({ color: 0x3a3d42, roughness: 0.95 });
-    addParkingPad(-16.6, -8.2, 12.9, 23.6, [-16.0, -13.0, -10.0], 'WN', padConc);
+    addParkingPad(-12.6, -4.2, 12.9, 23.6, [-12.0, -9.0, -6.0], 'WN', padConc);
     addParkingPad(11.5, 18.5, 11.5, 20.5, [12.0, 15.0, 18.0], 'NES', padAsph);
-    addLuxuryCar(-14.5, 16.0, Math.PI / 2, 0x1b2a44, 0xc9cdd3);   // midnight blue, silver upper
-    addLuxuryCar(-11.5, 16.0, Math.PI / 2, 0x0b0b0c, 0x0b0b0c);   // black, on the EV charger bay
+    addLuxuryCar(-10.5, 16.0, Math.PI / 2, 0x1b2a44, 0xc9cdd3);   // midnight blue, silver upper
+    addLuxuryCar(-7.5, 16.0, Math.PI / 2, 0x0b0b0c, 0x0b0b0c);   // black, on the EV charger bay
 
     const charger = new THREE.Group();
-    charger.position.set(-9.7, 0, 16.4);
+    charger.position.set(-5.7, 0, 16.4);
     box(0.48, 0.12, 0.42, MAT.dark, 0, 0.06, 0, charger);
     box(0.34, 1.18, 0.24, MAT.devWhite, 0, 0.71, 0, charger);
     box(0.23, 0.35, 0.025, MAT.devDark, 0, 0.88, 0.133, charger);
@@ -2049,22 +2113,22 @@ function buildSite() {
     led.position.set(0.08, 1.12, 0.145); charger.add(led);
     siteGroup.add(charger);
     const cableCurve = new THREE.CatmullRomCurve3([
-        new THREE.Vector3(-9.53, 0.52, 16.42),
-        new THREE.Vector3(-10.2, 0.62, 16.38),
-        new THREE.Vector3(-11.0, 0.58, 16.08),
-        new THREE.Vector3(-12.2, 0.62, 16.08)
+        new THREE.Vector3(-5.53, 0.52, 16.42),
+        new THREE.Vector3(-6.2, 0.62, 16.38),
+        new THREE.Vector3(-7.0, 0.58, 16.08),
+        new THREE.Vector3(-8.2, 0.62, 16.08)
     ]);
     siteGroup.add(new THREE.Mesh(new THREE.TubeGeometry(cableCurve, 24, 0.035, 8, false), MAT.devDark));
     const plug = new THREE.Mesh(new THREE.CylinderGeometry(0.065, 0.065, 0.16, 12), MAT.devDark);
-    plug.rotation.z = Math.PI / 2; plug.position.set(-12.24, 0.62, 16.08); siteGroup.add(plug);
+    plug.rotation.z = Math.PI / 2; plug.position.set(-8.24, 0.62, 16.08); siteGroup.add(plug);
     evChargerLight = new THREE.PointLight(0x22d3ee, 0.05, 4, 2);
-    evChargerLight.position.set(-9.7, 1.05, 16.4); siteGroup.add(evChargerLight);
+    evChargerLight.position.set(-5.7, 1.05, 16.4); siteGroup.add(evChargerLight);
 
     // planting
     addTree(-16, 9, 1.25); addTree(-15, -9, 1.0); addTree(15.5, -11, 1.1);
-    addPalm(19.0, 22.4, 6.5); addPalm(14, 2, 7.5); addPalm(-17.5, 21, 6); addPalm(13.5, -4, 6.8);
+    addPalm(19.0, 22.4, 6.5); addPalm(12.4, 0.2, 7.5); addPalm(-17.5, 21, 6); addPalm(13.5, -4, 6.8);
     for (let i = 0; i < 10; i++) addShrub(-19.3 + Math.random() * 2, 10 + Math.random() * 12, 0.5 + Math.random() * 0.3);
-    for (let i = 0; i < 8; i++) addShrub(16 + Math.random() * 3, 0 + Math.random() * 9, 0.6 + Math.random() * 0.4);
+    for (let i = 0; i < 8; i++) { const sx = 16 + Math.random() * 3, sz = Math.random() * 9; if (sx > 13.2 && sx < 18.2 && sz > 2.4 && sz < 8.6) continue; addShrub(sx, sz, 0.6 + Math.random() * 0.4); }
 
     // pool, deck, columns & pergola (GF plan: pool to the west of living)
     const d1 = W('GF', 300, 360), d2 = W('GF', 645, 800);
@@ -2265,7 +2329,7 @@ const cameraDefinitions = [
     { name: "Perimeter East", mount: "pole", base: 0, pos: [19.5, 3, -15], lookAt: [10, 0.5, 0] },
     { name: "Pool Deck North", mount: "wall", back: [1, 0], pos: [-9.24, 4.6, -1.5], lookAt: [-7, 0.5, 5] },
     { name: "Swimming Pool & Plunge", mount: "pole", base: 0, pos: [-10, 3, 10.5], lookAt: [-6.5, 0.4, 5] },
-    { name: "Front Garden", mount: "pole", base: 0, pos: [-19.3, 2.6, 12], lookAt: [-12, 0.5, 17] },
+    { name: "Front Garden", mount: "pole", base: 0, pos: [-19.3, 2.6, 12], lookAt: [-8, 0.5, 17] },
     { name: "Ground Floor Living", mount: "ceiling", ceil: 3.42, pos: [2.8, 3.3, -0.2], lookAt: [-1, 1, 4] },
     { name: "Wet & Main Kitchen", mount: "ceiling", ceil: 3.42, pos: [7.5, 3.3, -4.0], lookAt: [6, 1, -1] },
     { name: "1st Floor Family Area", mount: "ceiling", ceil: 6.72, pos: [2.6, 6.6, -1], lookAt: [-1, 4.2, 4] },
@@ -2350,7 +2414,7 @@ function initScene() {
 
     controls = new THREE.OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true; controls.dampingFactor = 0.06; controls.maxPolarAngle = Math.PI / 2 + 0.05;
-    controls.minDistance = 3; controls.maxDistance = 140;
+    controls.minDistance = 0.6; controls.maxDistance = 140;
 
     hemiLight = new THREE.HemisphereLight(0xbcd3ef, 0x6b5a45, 0.5); scene.add(hemiLight);
     sunLight = new THREE.DirectionalLight(0xffc58a, 0.6);
@@ -2360,7 +2424,7 @@ function initScene() {
 
     buildTextures(); buildMaterials(); buildDeviceGeometry();
     scene.add(siteGroup, extGroup); Object.values(floorGroups).forEach(g => scene.add(g));
-    buildSite(); buildBuilding(); buildStaircases(); buildInterior(); buildBasementCinema(); buildRoomLabels(); buildDevices(); buildRoomLights(); setupCCTVSystem(); setupParticles();
+    buildSite(); buildBuilding(); buildStaircases(); buildInterior(); buildBasementCinema(); buildRoomLabels(); buildDevices(); buildRoomLights(); buildExtras(); setupCCTVSystem(); setupParticles();
 
     raycaster = new THREE.Raycaster();
     renderer.domElement.addEventListener('pointermove', onPointerMove);
@@ -2900,7 +2964,7 @@ function buildZoneUI() {
         last = z.floor;
         return head + `<div class="glass-card p-2.5 rounded-xl space-y-1.5">
             <div class="flex justify-between items-center gap-2">
-                <span class="font-semibold text-slate-200 truncate">${z.name} <span class="text-[10px] text-slate-500 ml-1">${z.roomLight ? 'RGBW downlight' : n + ' lights · RGBW'}</span></span>
+                <span class="font-semibold text-slate-200 truncate">${z.name} <span class="text-[10px] text-slate-500 ml-1">${z.sub || (z.roomLight ? 'RGBW downlight' : n + ' lights · RGBW')}</span></span>
                 <div class="flex items-center gap-2 shrink-0">
                     <input type="color" id="zone-${z.id}-col" value="${z.color}" oninput="setZoneColor('${z.id}', this.value)">
                     <input type="checkbox" id="zone-${z.id}-on" onchange="setZoneOn('${z.id}', this.checked)" class="accent-emerald-500 h-4 w-4">
@@ -3043,6 +3107,7 @@ function setCameraView(view, keepFloor) {
         case 'CINEMA': setFloorFilter('BSMT', true); switchTab('cinema'); animateCameraPosition(6.9, -0.6, 0.4, -1.5, -1.7, 1.78); break;
         case 'ENTRANCE': animateCameraPosition(10, 2.4, 20, 4.5, 3.4, 7.5); break;
         case 'ROOF': animateCameraPosition(16, 22, 14, 2, 10, -1); break;
+        case 'SHED': case 'SHED_INV': case 'SHED_DB': case 'SHED_MAINDB': shedView(view); break;
     }
 }
 function resetCamera() {
@@ -3155,6 +3220,10 @@ function deviceState(d) {
         case 'speaker': return isAudioOn && audioZones.has(d.zone) ? 'Playing' : 'Idle';
         case 'presence': return d.lastMotion ? `Last motion ${Math.round((Date.now() - d.lastMotion) / 1000)} s ago` : 'No motion';
         case 'smoke': return isAlarmActive ? 'ALARM' : 'Normal';
+        case 'evcharger': return isEvCharging ? (evPowerKw > 0 ? 'Charging ' + evPowerKw.toFixed(1) + ' kW' : 'Waiting for solar') : 'Idle - tap to start';
+        case 'inverter': return 'PV ' + solarGenerationKw.toFixed(1) + ' kW · battery ' + Math.round(SHED.bat) + '%';
+        case 'miniserver': case 'db': return SHED.doorOpen ? 'Shed open - tap to open the board' : 'Tap to open the shed';
+        case 'tablet': return 'Online - tap to open';
         default: return 'Online';
     }
 }
@@ -3165,7 +3234,7 @@ function updateTooltip() {
     if (!d) { tooltip.style.display = 'none'; return; }
     const t = TYPE[d.type];
     tooltip.innerHTML = `<div class="flex items-center gap-2 mb-1"><span class="inline-block w-3 h-3 rounded-full" style="background:${t.color}"></span><b class="text-slate-100">${t.name}</b><span class="text-slate-500 ml-auto">${d.id}</span></div>
-        <div class="text-slate-300">${FLOOR_LABEL[d.floor]} · ${d.room}</div>
+        <div class="text-slate-300">${d.floorLabel || FLOOR_LABEL[d.floor]} · ${d.room}</div>
         <div class="text-slate-400 mt-1">${t.desc}</div>
         <div class="mt-1 font-semibold text-emerald-300">${deviceState(d)}</div>`;
     tooltip.style.display = 'block';
@@ -3174,7 +3243,8 @@ function updateTooltip() {
 }
 let downAt = { x: 0, y: 0 };
 function onClick(e) {
-    if (walk.active || Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y) > 6) return;
+    if (walk.active) { walkClickUse(); return; }
+    if (Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y) > 6) return;
     const d = pickDevice(); if (!d) return;
     const z = d.zone && zones[d.zone];
     switch (d.type) {
@@ -3184,6 +3254,11 @@ function onClick(e) {
         case 'speaker': if (!isAudioOn) { isAudioOn = true; audioZones.add(d.zone); } else toggleAudioZone(d.zone); refreshAudioUI(); break;
         case 'smoke': toggleHazardAlarm(); break;
         case 'display': switchTab('lighting'); break;
+        case 'tablet': openTablet(d); break;
+        case 'evcharger': toggleEvCharging(); break;
+        case 'inverter': setCameraView('SHED_INV'); break;
+        case 'miniserver': setCameraView('SHED_DB'); break;
+        case 'db': setCameraView('SHED_MAINDB'); break;
     }
     pointerDirty = true;
 }
@@ -3232,6 +3307,7 @@ function animate() {
 
     blinds.forEach(b => b.scale.y += (blindsTarget - b.scale.y) * 0.06);
     if (slidingGate) slidingGate.position.x += (gateTargetX - slidingGate.position.x) * 0.05;
+    shedAnimate(dt);
     if (waterLevelMesh) waterLevelMesh.scale.y += (tankTarget - waterLevelMesh.scale.y) * 0.03;
     animateCinema(dt, t);
     updatePoolLights(t);
@@ -3244,7 +3320,7 @@ function animate() {
         document.getElementById('solar-live-val').innerText = kw; document.getElementById('solar-gen-text').innerText = kw + ' kW';
         document.getElementById('solar-bar').style.width = Math.min(100, kw / 6 * 100) + '%';
         updateEvChargerUI();
-        cinemaClimateTick(0.5); updateCinemaUI();
+        cinemaClimateTick(0.5); updateCinemaUI(); extrasTick();
     }
 
     updateEvChargerUI(dt);
@@ -3255,6 +3331,429 @@ function animate() {
 function onWindowResize() {
     camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
+}
+
+/* =====================================================================
+   18. EXTRAS: Loxone control tablets, bed LED strip, EV wallbox device,
+       inverter & DB shed, digital experience tour
+===================================================================== */
+const SCENES = [['DEFAULT', 'Day', 'fa-sun'], ['DUSK', 'Dusk', 'fa-cloud-sun'], ['NIGHT', 'Night', 'fa-moon'], ['PARTY', 'Party', 'fa-champagne-glasses'], ['AWAY', 'Away', 'fa-user-lock']];
+const tablets = [];
+
+// a Loxone device that is placed in world coordinates (not read from the plan symbol lists)
+function siteDevice(f, type, x, y, z, o = {}) {
+    const root = new THREE.Group(); root.position.set(x, 0, z);
+    const dev = { id: '', floor: f, type, room: o.room || '', zone: o.zone || null, root, px: 0, py: 0, pulse: 0, phase: Math.random(), floorLabel: o.floorLabel };
+    (o.picks || [[x, y, z, 0.3]]).forEach(([wx, wy, wz, r]) => {
+        const pick = new THREE.Mesh(new THREE.SphereGeometry(r, 8, 6), pickMat); pick.position.set(wx - x, wy, wz - z);
+        pick.userData.dev = dev; root.add(pick); pickables.push(pick);
+    });
+    const marker = new THREE.Sprite(markerMaterial(type)); marker.scale.set(0.42, 0.42, 1);
+    marker.position.set(x, y + 0.45, z); marker.renderOrder = 999; markerGroups[f].add(marker); dev.marker = marker;
+    deviceGroups[f].add(root); devices.push(dev);
+    const n = devices.filter(d => d.floor === f && d.type === type).length;
+    dev.id = `${f === 'BSMT' ? 'B' : f === 'GF' ? 'G' : f === 'F1' ? '1' : '2'}-${TYPE[type].letter}${String(n).padStart(2, '0')}`;
+    return dev;
+}
+
+/* ---------- Loxone control tablets ---------- */
+function buildTablet(f, x, y, z, rotY, key, room) {
+    const dev = siteDevice(f, 'tablet', x, y, z, { room, picks: [[x, y, z, 0.34]] });
+    const g = new THREE.Group(); g.position.set(0, y, 0); g.rotation.y = rotY; dev.root.add(g);
+    g.add(new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.24, 0.025), MAT.devDark));
+    const cv = document.createElement('canvas'); cv.width = 340; cv.height = 220;
+    const tex = new THREE.CanvasTexture(cv);
+    const screen = new THREE.Mesh(new THREE.PlaneGeometry(0.31, 0.2), new THREE.MeshBasicMaterial({ map: tex })); screen.position.z = 0.0135; g.add(screen);
+    const led = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.006, 0.004), new THREE.MeshBasicMaterial({ color: LOXGREEN })); led.position.set(0, -0.113, 0.0135); g.add(led);
+    dev.tab = { cv, tex, key, room };
+    tablets.push(dev); drawTablet(dev);
+    return dev;
+}
+const LOXGREEN = 0x8dc63f;
+function drawTablet(dev) {
+    const { cv, tex, room } = dev.tab, g = cv.getContext('2d'), w = cv.width;
+    g.fillStyle = '#0b1220'; g.fillRect(0, 0, w, 220);
+    g.fillStyle = '#17231a'; g.fillRect(0, 0, w, 36);
+    g.fillStyle = '#8dc63f'; g.font = 'bold 22px Arial'; g.textAlign = 'left'; g.fillText('loxone', 12, 26);
+    const d = new Date(); g.fillStyle = '#e2e8f0'; g.textAlign = 'right'; g.font = 'bold 18px Arial';
+    g.fillText(String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'), w - 12, 26);
+    g.textAlign = 'left'; g.fillStyle = '#94a3b8'; g.font = '14px Arial'; g.fillText(room, 12, 58);
+    const cols = { DEFAULT: '#f59e0b', DUSK: '#fb923c', NIGHT: '#6366f1', PARTY: '#ec4899', AWAY: '#10b981' };
+    SCENES.forEach(([k, n], i) => {
+        const x = 12 + i * 64, on = currentScene === k;
+        g.fillStyle = on ? cols[k] : '#1e293b'; g.fillRect(x, 70, 58, 58);
+        g.fillStyle = on ? '#0b1220' : '#cbd5e1'; g.font = 'bold 13px Arial'; g.textAlign = 'center'; g.fillText(n, x + 29, 104);
+    });
+    g.textAlign = 'left'; g.fillStyle = '#e2e8f0'; g.font = '14px Arial';
+    g.fillText(`PV ${solarGenerationKw.toFixed(1)} kW   EV ${isEvCharging ? 'charging' : 'idle'}`, 12, 156);
+    g.fillText(`Gate ${isGateOpen ? 'open' : 'closed'}   Alarm ${isAlarmActive ? 'ACTIVE' : 'ok'}`, 12, 178);
+    g.fillStyle = '#8dc63f'; g.font = 'bold 13px Arial'; g.fillText('Tap to open controls', 12, 205);
+    tex.needsUpdate = true;
+}
+
+/* ---------- tablet UI (real controls) ---------- */
+let tabCtx = null;
+const TAB_ZONES = {
+    hall: () => { const z = Object.values(zones).find(z => z.floor === 'F2' && z.name === 'Hall'); return z ? [z.id] : []; },
+    master: () => ['master', 'bedled']
+};
+function openTablet(dev) {
+    if (!dev || !dev.tab) return;
+    tabCtx = dev.tab; if (document.pointerLockElement) document.exitPointerLock();
+    walk.keys = {}; walk.joy.x = walk.joy.y = 0;
+    renderTablet(); document.getElementById('tablet-ui').classList.remove('hidden'); syncTablet();
+    tabToast('Connected to Loxone Miniserver');
+}
+function closeTablet() { tabCtx = null; document.getElementById('tablet-ui').classList.add('hidden'); }
+function tabToast(msg) {
+    const e = document.getElementById('tab-toast'); if (!e || !msg) return;
+    e.innerHTML = '<i class="fa-solid fa-circle-check mr-1.5"></i>' + msg;
+}
+function renderTablet() {
+    const c = tabCtx;
+    document.getElementById('tab-room').innerText = c.room;
+    const sec = (title, icon, body) => `<section class="glass-card rounded-xl p-3 space-y-2"><h4 class="text-[10px] font-bold uppercase tracking-wider text-slate-400"><i class="fa-solid ${icon} mr-1.5"></i>${title}</h4>${body}</section>`;
+    const btn = (id, label, call, cls = '') => `<button id="${id}" onclick="${call}" class="tb-btn ${cls}">${label}</button>`;
+    const slider = (id, call, min, max) => `<input type="range" min="${min}" max="${max}" id="${id}" oninput="${call}" class="w-full accent-emerald-500 h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer">`;
+    const zoneCard = id => {
+        const z = zones[id];
+        return `<div class="space-y-1.5"><div class="flex justify-between items-center gap-2"><span class="font-semibold text-slate-200 truncate">${z.name}</span>${btn('tb-zon-' + id, 'ON', `tabletAct('zon','${id}')`, 'w-16 shrink-0')}</div>
+            ${slider('tb-zlv-' + id, `tabletAct('zlv','${id}',this.value)`, 5, 100)}
+            <div class="flex gap-1.5 flex-wrap">${LIGHT_SWATCHES.map(([col, t]) => `<button title="${t}" onclick="tabletAct('zcol','${id}','${col}')" class="w-7 h-7 rounded border border-white/25" style="background:${col}"></button>`).join('')}</div></div>`;
+    };
+    const html = [
+        sec('Scenes', 'fa-wand-magic-sparkles', `<div class="grid grid-cols-5 gap-1.5">${SCENES.map(([k, n, ic]) => btn('tb-scene-' + k, `<i class="fa-solid ${ic} block mb-0.5"></i>${n}`, `tabletAct('scene','${k}')`)).join('')}</div>`),
+        sec(c.key === 'master' ? 'Master bedroom lighting' : 'Hall lighting', 'fa-lightbulb', TAB_ZONES[c.key]().map(zoneCard).join('<hr class="border-slate-700/60">') +
+            `<div class="grid grid-cols-2 gap-1.5 pt-1">${btn('tb-alloff', 'All lights off', `tabletAct('alloff')`)}${btn('tb-allon', 'All lights on', `tabletAct('allon')`)}</div>`),
+        sec('Comfort & media', 'fa-couch', `<div class="grid grid-cols-2 gap-1.5">${btn('tb-blinds', 'Blinds', `tabletAct('blinds')`)}${btn('tb-music', 'Multiroom music', `tabletAct('music')`)}</div>
+            <label class="flex items-center gap-2 text-slate-400"><i class="fa-solid fa-volume-high"></i>${slider('tb-vol', `tabletAct('vol',this.value)`, 0, 100)}</label>`),
+        sec('Access & safety', 'fa-shield-halved', `<div class="grid grid-cols-3 gap-1.5">${btn('tb-gate', 'Gate', `tabletAct('gate')`)}${btn('tb-nfc', 'Front door', `tabletAct('nfc')`)}${btn('tb-alarm', 'Test alarm', `tabletAct('alarm')`)}</div>`),
+        sec('Pool & cinema', 'fa-water-ladder', `<div class="grid grid-cols-4 gap-1.5">${Object.entries(POOL_SCENES).map(([k, s]) => btn('tb-pool-' + k, s.label, `tabletAct('pool','${k}')`)).join('')}</div>
+            <div class="grid grid-cols-3 gap-1.5">${['movie', 'lightsup', 'off'].map(k => btn('tb-cin-' + k, 'Cinema: ' + CIN_SCENES[k].label, `tabletAct('cin','${k}')`)).join('')}</div>`),
+        sec('Energy & EV', 'fa-bolt', `<div class="grid grid-cols-3 gap-1.5">${btn('tb-ev', 'EV charge', `tabletAct('ev')`)}${btn('tb-evm-solar', 'PV surplus', `tabletAct('evmode','solar')`)}${btn('tb-evm-fast', 'Fast', `tabletAct('evmode','fast')`)}</div>
+            <p id="tb-energy" class="text-[11px] text-slate-400"></p>
+            <div class="grid grid-cols-2 gap-1.5">${btn('tb-shed', 'Inverter &amp; DB shed', `tabletAct('shed','SHED_INV')`)}${btn('tb-tour', 'Experience tour', `tabletAct('tour')`)}</div>`)
+    ].join('');
+    document.getElementById('tab-body').innerHTML = html;
+}
+function syncTablet() {
+    if (!tabCtx) return;
+    const $ = id => document.getElementById(id), on = (id, v) => { const e = $(id); if (e) e.classList.toggle('on', !!v); }, txt = (id, t) => { const e = $(id); if (e) e.innerHTML = t; };
+    SCENES.forEach(([k]) => on('tb-scene-' + k, currentScene === k));
+    TAB_ZONES[tabCtx.key]().forEach(id => {
+        const z = zones[id], live = zoneLevel(z) > 0; on('tb-zon-' + id, live); txt('tb-zon-' + id, live ? 'ON' : 'OFF');
+        const s = $('tb-zlv-' + id); if (s && document.activeElement !== s) s.value = z.level;
+    });
+    const bo = blindsTarget < 0.5; on('tb-blinds', bo); txt('tb-blinds', bo ? 'Blinds: open' : 'Blinds: closed');
+    on('tb-music', isAudioOn); txt('tb-music', isAudioOn ? 'Music: on' : 'Music: off');
+    const v = $('tb-vol'); if (v && document.activeElement !== v) v.value = Math.round(audioVolume * 100);
+    on('tb-gate', isGateOpen); txt('tb-gate', isGateOpen ? 'Gate: open' : 'Gate: closed');
+    on('tb-alarm', isAlarmActive);
+    Object.keys(POOL_SCENES).forEach(k => on('tb-pool-' + k, pool.scene === k));
+    ['movie', 'lightsup', 'off'].forEach(k => on('tb-cin-' + k, cinema.scene === k));
+    on('tb-ev', isEvCharging); txt('tb-ev', isEvCharging ? 'EV: charging' : 'EV charge');
+    on('tb-evm-solar', evChargeMode === 'solar'); on('tb-evm-fast', evChargeMode === 'fast');
+    txt('tb-energy', `PV ${solarGenerationKw.toFixed(1)} kW · EV ${evPowerKw.toFixed(1)} kW · Battery ${Math.round(SHED.bat)}%`);
+    const d = new Date(); txt('tab-clock', String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'));
+}
+function tabletAct(n, a, b) {
+    let msg = '';
+    switch (n) {
+        case 'scene': triggerScene(a); msg = `Scene "${SCENES.find(s => s[0] === a)[1]}" executed`; break;
+        case 'zon': { const z = zones[a]; z.on = !(zoneLevel(z) > 0); z.autoUntil = 0; applyZone(z); syncZoneUI(); msg = `${z.name}: ${z.on ? 'on' : 'off'}`; break; }
+        case 'zlv': setZoneLevel(a, b); break;
+        case 'zcol': { const z = zones[a]; z.on = true; z.autoUntil = 0; setZoneColor(a, b); syncZoneUI(); msg = `${z.name}: colour set`; break; }
+        case 'alloff': setAllZonesOn(false); msg = 'All lights off'; break;
+        case 'allon': setAllZonesOn(true); msg = 'All lights on'; break;
+        case 'blinds': setBlindsState(blindsTarget > 0.5); msg = blindsTarget < 0.5 ? 'Blinds opening' : 'Blinds closing'; break;
+        case 'music': toggleAudio(); msg = isAudioOn ? 'Multiroom music started' : 'Music stopped'; break;
+        case 'vol': audioVolume = a / 100; break;
+        case 'gate': toggleMainGate(); msg = isGateOpen ? 'Gate opening' : 'Gate closing'; break;
+        case 'nfc': simulateNFCScan(); msg = 'Front door unlocked'; break;
+        case 'alarm': toggleHazardAlarm(); msg = isAlarmActive ? 'Smoke alarm test running' : 'Alarm reset'; break;
+        case 'pool': setPoolScene(a); msg = `Pool scene: ${POOL_SCENES[a].label}`; break;
+        case 'cin': setCinemaScene(a); msg = `Cinema: ${CIN_SCENES[a].label}`; break;
+        case 'ev': toggleEvCharging(); msg = isEvCharging ? 'Wallbox: charging started' : 'Wallbox: charging stopped'; break;
+        case 'evmode': setEvChargeMode(a); msg = `Wallbox mode: ${a === 'solar' ? 'PV surplus' : 'fast charge'}`; break;
+        case 'shed': closeTablet(); setCameraView(a); return;
+        case 'tour': closeTablet(); startExperienceTour(); return;
+    }
+    tabToast(msg); syncTablet(); tablets.forEach(drawTablet);
+}
+function nearTablet() {
+    if (!walk.active) return null;
+    let best = null, bd = 2.4;
+    tablets.forEach(d => { if (d.floor !== walk.floor) return; const dd = Math.hypot(d.root.position.x - walk.pos.x, d.root.position.z - walk.pos.z); if (dd < bd) { bd = dd; best = d; } });
+    return best;
+}
+function walkUseCheck() {
+    const b = document.getElementById('walk-use'); if (!b) return;
+    const n = nearTablet(); b._dev = n;
+    b.classList.toggle('hidden', !n || !document.getElementById('tablet-ui').classList.contains('hidden'));
+}
+function walkClickUse() {
+    raycaster.setFromCamera({ x: 0, y: 0 }, camera);
+    const hit = raycaster.intersectObjects(pickables, false).find(h => h.object.userData.dev && h.object.userData.dev.type === 'tablet' && h.distance < 3.6);
+    if (hit) openTablet(hit.object.userData.dev);
+}
+
+/* ---------- master bed LED strip (its own RGBW circuit) ---------- */
+function buildBedLed() {
+    const bed = INTERIOR.F2.furniture.find(f => f[0] === 'bed');
+    const a = IP('F2', bed[1], bed[2]), b = IP('F2', bed[3], bed[4]);
+    const x0 = Math.min(a.x, b.x), x1 = Math.max(a.x, b.x), z0 = Math.min(a.z, b.z), z1 = Math.max(a.z, b.z), cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
+    const y = LEVEL.F2 + 0.1, t = 0.035, o = 0.05, g = floorGroups.F2;
+    const mat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, emissive: 0xffd29a, emissiveIntensity: 0 });
+    const strip = (w, h, d, x, yy, zz) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat); m.position.set(x, yy, zz); g.add(m); };
+    strip(x1 - x0 + 2 * o, t, t, cx, y, z0 - o);           // along the left side
+    strip(x1 - x0 + 2 * o, t, t, cx, y, z1 + o);           // along the right side
+    strip(t, t, z1 - z0 + 2 * o, x0 - o, y, cz);           // foot of the bed
+    strip(t, t, z1 - z0 + 2 * o, x1 + o, y, cz);           // behind the headboard
+    strip(t, t, z1 - z0, x1 - 0.05, LEVEL.F2 + 1.19, cz);  // headboard top edge
+    const light = new THREE.PointLight(0xffd29a, 0, 4.5, 1.6); light.position.set(cx, LEVEL.F2 + 0.25, cz); g.add(light);
+    zones.bedled = {
+        id: 'bedled', name: 'Master bed LED strip', sub: 'RGBW LED strip around the bed', floor: 'F2', on: true, level: 60, color: '#c084fc',
+        hasRgbw: true, hasSpeakers: false, autoUntil: 0, roomLight: true,
+        spotMat: new THREE.MeshStandardMaterial(), coneMat: new THREE.MeshBasicMaterial({ visible: false }), rgbwMat: mat, light
+    };
+    applyZone(zones.bedled);
+    siteDevice('F2', 'rgbw', cx, LEVEL.F2 + 0.3, cz, { room: 'Master Bedroom', zone: 'bedled', picks: [[cx, LEVEL.F2 + 0.35, cz, 0.55]] });
+}
+
+/* ---------- inverter & DB shed ---------- */
+const SHED = { cx: 15.6, cz: 5.5, w: 3.2, d: 2.6, h: 2.6, doorOpen: false, doorAng: 0, door: null, roof: null, light: null, db: {}, bat: 92, inv: null };
+function dbLabelTexture(l1, l2, l3) {
+    const cv = document.createElement('canvas'); cv.width = 256; cv.height = 340; const g = cv.getContext('2d');
+    g.fillStyle = '#1f2933'; g.fillRect(0, 0, 256, 340);
+    g.fillStyle = '#8dc63f'; g.font = 'bold 46px Arial'; g.textAlign = 'center'; g.fillText(l1, 128, 110);
+    g.fillStyle = '#f8fafc'; g.font = 'bold 22px Arial'; g.fillText(l2, 128, 170); g.font = '17px Arial'; g.fillStyle = '#94a3b8'; g.fillText(l3, 128, 205);
+    g.strokeStyle = '#8dc63f'; g.lineWidth = 3; g.strokeRect(14, 14, 228, 312);
+    return new THREE.CanvasTexture(cv);
+}
+function makeDB(kind) {
+    const g = new THREE.Group();
+    const shell = new THREE.MeshStandardMaterial({ color: 0x8b95a1, metalness: 0.4, roughness: 0.55 });
+    const rail = new THREE.MeshStandardMaterial({ color: 0xc7ccd3, metalness: 0.7, roughness: 0.35 });
+    const part = (w, h, d, mat, x, y, z, parent = g) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat); m.position.set(x, y, z); m.castShadow = true; parent.add(m); return m; };
+    part(0.9, 0.03, 0.2, shell, 0, 0.585, 0); part(0.9, 0.03, 0.2, shell, 0, -0.585, 0);
+    part(0.03, 1.2, 0.2, shell, -0.435, 0, 0); part(0.03, 1.2, 0.2, shell, 0.435, 0, 0);
+    part(0.9, 1.2, 0.02, new THREE.MeshStandardMaterial({ color: 0xe5e7eb, roughness: 0.8 }), 0, 0, -0.09);
+    const row = (y, mods, x0 = -0.4) => {
+        part(0.82, 0.02, 0.012, rail, 0, y - 0.065, -0.075);
+        let x = x0;
+        mods.forEach(([w, col, led]) => {
+            part(w - 0.004, 0.11, 0.07, new THREE.MeshStandardMaterial({ color: col, roughness: 0.5 }), x + w / 2, y, -0.03);
+            if (led) part(0.014, 0.014, 0.004, new THREE.MeshBasicMaterial({ color: led }), x + w / 2, y + 0.035, 0.007);
+            x += w;
+        });
+    };
+    const mcb = n => Array.from({ length: n }, (_, i) => [0.036, i % 5 === 4 ? 0x374151 : 0xe5e7eb, i % 3 === 0 ? 0x22c55e : 0]);
+    if (kind === 'lox') {
+        row(0.4, [[0.2, 0x8dc63f, 0x22c55e], [0.09, 0xd1d5db, 0x84cc16], [0.09, 0xd1d5db, 0x84cc16], [0.09, 0xd1d5db, 0x84cc16], [0.04, 0x1f2937, 0], [0.12, 0x374151, 0x38bdf8]]);
+        row(0.14, mcb(10)); row(-0.12, [[0.07, 0xe5e7eb, 0xef4444], [0.07, 0xe5e7eb, 0xef4444], ...mcb(8)]);
+        row(-0.38, Array.from({ length: 14 }, (_, i) => [0.028, i === 13 ? 0xeab308 : (i % 2 ? 0x3b82f6 : 0x9ca3af), 0]));
+    } else {
+        row(0.4, [[0.1, 0x1f2937, 0xef4444], [0.06, 0xf59e0b, 0], [0.2, 0xf3f4f6, 0x38bdf8], [0.12, 0x1f2937, 0]]);
+        row(0.14, mcb(12)); row(-0.12, mcb(12)); row(-0.38, Array.from({ length: 10 }, (_, i) => [0.04, i % 2 ? 0x3b82f6 : 0x9ca3af, 0]));
+    }
+    const pivot = new THREE.Group(); pivot.position.set(-0.45, 0, 0.1); g.add(pivot);
+    part(0.9, 1.2, 0.025, shell, 0.45, 0, 0.0125, pivot);
+    const tex = kind === 'lox' ? dbLabelTexture('loxone', 'MINISERVER · DB-01', 'Lighting · audio · energy') : dbLabelTexture('DB-MAIN', 'MAIN DISTRIBUTION', '3-phase · 63 A · RCD/MCB');
+    const lab = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.66), new THREE.MeshBasicMaterial({ map: tex })); lab.position.set(0.45, 0.05, 0.0265); pivot.add(lab);
+    part(0.03, 0.14, 0.03, rail, 0.84, 0, 0.04, pivot);
+    return { group: g, pivot };
+}
+function buildShed() {
+    const S = SHED, g = new THREE.Group(); siteGroup.add(g);
+    const { cx, cz, w, d, h } = S, t = 0.16, x0 = cx - w / 2, x1 = cx + w / 2, z0 = cz - d / 2, z1 = cz + d / 2;
+    const steel = new THREE.MeshStandardMaterial({ color: 0x4b5563, metalness: 0.6, roughness: 0.45 });
+    box(w + 0.5, 0.1, d + 0.5, MAT.coping, cx, 0.05, cz, g);
+    box(w - 0.1, 0.02, d - 0.1, new THREE.MeshStandardMaterial({ color: 0x6b7280, roughness: 0.9 }), cx, 0.11, cz, g);
+    box(t, h, d, MAT.plaster, x1 - t / 2, h / 2, cz, g);
+    box(w, h, t, MAT.plaster, cx, h / 2, z0 + t / 2, g);
+    box(w, h, t, MAT.plaster, cx, h / 2, z1 - t / 2, g);
+    const seg = (cz - 0.65) - z0;
+    box(t, h, seg, MAT.plaster, x0 + t / 2, h / 2, z0 + seg / 2, g);
+    box(t, h, z1 - (cz + 0.65), MAT.plaster, x0 + t / 2, h / 2, (z1 + cz + 0.65) / 2, g);
+    box(t, h - 2.15, 1.3, MAT.plaster, x0 + t / 2, 2.15 + (h - 2.15) / 2, cz, g);
+    S.roof = new THREE.Group(); g.add(S.roof);
+    box(w + 0.3, 0.2, d + 0.3, MAT.plaster, cx, h + 0.1, cz, S.roof); box(w + 0.4, 0.06, d + 0.4, MAT.coping, cx, h + 0.23, cz, S.roof);
+    box(0.06, h, 0.06, steel, x1 + 0.06, h / 2, cz, g);   // PV string conduit coming down the outside wall
+    S.light = new THREE.PointLight(0xfff1d6, 0, 6, 1.6); S.light.position.set(cx, h - 0.35, cz); g.add(S.light);
+    box(0.9, 0.04, 0.12, new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xfff1d6, emissiveIntensity: 0.7 }), cx, h - 0.04, cz, g); // ceiling light
+
+    // door (hinged on its north edge, swings outwards)
+    S.door = new THREE.Group(); S.door.position.set(x0, 0, cz - 0.65); g.add(S.door);
+    const leaf = new THREE.Mesh(new THREE.BoxGeometry(0.06, 2.12, 1.3), steel); leaf.position.set(0.03, 1.17, 0.65); leaf.castShadow = true; S.door.add(leaf);
+    for (let i = 0; i < 6; i++) { const sl = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.03, 0.5), MAT.devDark); sl.position.set(0.03, 0.3 + i * 0.06, 0.65); S.door.add(sl); }
+    const hnd = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 0.22), MAT.devWhite); hnd.position.set(-0.03, 1.05, 1.1); S.door.add(hnd);
+    const sc = document.createElement('canvas'); sc.width = 256; sc.height = 160; const sg = sc.getContext('2d');
+    sg.fillStyle = '#f8fafc'; sg.fillRect(0, 0, 256, 160); sg.fillStyle = '#b91c1c'; sg.fillRect(0, 0, 256, 40);
+    sg.fillStyle = '#fff'; sg.font = 'bold 22px Arial'; sg.textAlign = 'center'; sg.fillText('DANGER · 230/400 V', 128, 28);
+    sg.fillStyle = '#111827'; sg.font = 'bold 24px Arial'; sg.fillText('INVERTER & DB ROOM', 128, 82); sg.font = '16px Arial'; sg.fillText('Authorised persons only', 128, 112);
+    const plaque = new THREE.Mesh(new THREE.PlaneGeometry(0.62, 0.39), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(sc) })); plaque.rotation.y = -Math.PI / 2; plaque.position.set(-0.004, 1.45, 0.65); S.door.add(plaque);
+
+    // hybrid inverter on the east wall
+    const ix = x1 - t - 0.1, iz = cz - 0.55;
+    const inv = new THREE.Group(); inv.position.set(ix, 1.35, iz); inv.rotation.y = -Math.PI / 2; g.add(inv);
+    box(0.62, 0.8, 0.2, MAT.devWhite, 0, 0, 0, inv);
+    for (let i = 0; i < 6; i++) box(0.5, 0.012, 0.03, new THREE.MeshStandardMaterial({ color: 0xcbd5e1 }), 0, -0.3 + i * 0.03, 0.115, inv);
+    const ic = document.createElement('canvas'); ic.width = 300; ic.height = 190;
+    const itex = new THREE.CanvasTexture(ic);
+    const iscr = new THREE.Mesh(new THREE.PlaneGeometry(0.46, 0.29), new THREE.MeshBasicMaterial({ map: itex })); iscr.position.set(0, 0.17, 0.101); inv.add(iscr);
+    S.inv = { cv: ic, tex: itex };
+    const ilead = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.015, 0.01), new THREE.MeshBasicMaterial({ color: 0x22c55e })); ilead.position.set(0, -0.12, 0.103); inv.add(ilead);
+    // battery stack
+    const bz = cz + 0.55;
+    for (let i = 0; i < 3; i++) {
+        const bm = new THREE.Group(); bm.position.set(x1 - t - 0.14, 0.32 + i * 0.34, bz); bm.rotation.y = -Math.PI / 2; g.add(bm);
+        box(0.62, 0.3, 0.26, new THREE.MeshStandardMaterial({ color: 0x374151, roughness: 0.5 }), 0, 0, 0, bm);
+        for (let k = 0; k < 4; k++) box(0.03, 0.03, 0.006, new THREE.MeshBasicMaterial({ color: 0x22c55e }), -0.2 + k * 0.1, 0.06, 0.133, bm);
+        box(0.3, 0.05, 0.006, new THREE.MeshBasicMaterial({ color: LOXGREEN }), 0.1, -0.06, 0.133, bm);
+    }
+    // cable trunking between the boards and the inverter
+    box(1.7, 0.07, 0.06, MAT.devDark, cx + 0.55, 2.15, z0 + t + 0.04, g); box(0.07, 0.75, 0.06, MAT.devDark, x1 - t - 0.06, 1.78, z0 + t + 0.04, g);
+
+    // distribution boards: Loxone DB on the north wall, main DB on the south wall
+    const lox = makeDB('lox'), mainDb = makeDB('main');
+    lox.group.position.set(cx - 0.3, 1.45, z0 + t + 0.1); g.add(lox.group);
+    mainDb.group.position.set(cx + 0.3, 1.45, z1 - t - 0.1); mainDb.group.rotation.y = Math.PI; g.add(mainDb.group);
+    S.db.lox = { door: lox.pivot, ang: 0, open: false }; S.db.main = { door: mainDb.pivot, ang: 0, open: false };
+
+    // Loxone devices in the shed
+    const door = [x0, 1.1, cz, 0.85];
+    siteDevice('GF', 'inverter', ix, 1.3, iz, { room: 'Inverter & DB shed', floorLabel: 'Site / shed', picks: [[ix, 1.3, iz, 0.55], door] });
+    siteDevice('GF', 'miniserver', cx - 0.3, 1.45, z0 + t + 0.1, { room: 'Inverter & DB shed', floorLabel: 'Site / shed', picks: [[cx - 0.3, 1.45, z0 + t + 0.15, 0.6]] });
+    siteDevice('GF', 'db', cx + 0.3, 1.45, z1 - t - 0.1, { room: 'Inverter & DB shed', floorLabel: 'Site / shed', picks: [[cx + 0.3, 1.45, z1 - t - 0.15, 0.6]] });
+    drawInverter();
+}
+function drawInverter() {
+    const S = SHED; if (!S.inv) return;
+    const g = S.inv.cv.getContext('2d'), load = shedLoad(), net = solarGenerationKw - load;
+    g.fillStyle = '#04141f'; g.fillRect(0, 0, 300, 190);
+    g.fillStyle = '#8dc63f'; g.font = 'bold 16px Arial'; g.textAlign = 'left'; g.fillText('HYBRID INVERTER 10 kW', 12, 24);
+    g.fillStyle = '#22c55e'; g.beginPath(); g.arc(280, 18, 6, 0, 7); g.fill();
+    g.fillStyle = '#facc15'; g.font = 'bold 46px Arial'; g.fillText(solarGenerationKw.toFixed(1), 12, 82); g.font = '18px Arial'; g.fillText('kW  solar', 100, 80);
+    g.fillStyle = '#e2e8f0'; g.font = '16px Arial';
+    g.fillText(`Load ${load.toFixed(1)} kW`, 12, 112);
+    g.fillText(`Battery ${Math.round(S.bat)}%  ${net > 0.05 && S.bat < 100 ? 'charging' : net < -0.05 && S.bat > 20 ? 'discharging' : 'idle'}`, 12, 136);
+    g.fillText(shedGrid(net), 12, 160);
+    g.fillStyle = '#64748b'; g.font = '12px Arial'; g.fillText('Modbus to Loxone Miniserver · online', 12, 182);
+    S.inv.tex.needsUpdate = true;
+}
+function shedLoad() { return 1.2 + evPowerKw + (isAudioOn ? 0.3 : 0); }
+function shedGrid(net) { return net >= 0 ? (SHED.bat >= 100 ? `Grid export ${net.toFixed(1)} kW` : 'Grid 0.0 kW') : (SHED.bat <= 20 ? `Grid import ${(-net).toFixed(1)} kW` : 'Grid 0.0 kW'); }
+function shedDoor(open = !SHED.doorOpen) { SHED.doorOpen = open; updateShedUI(); }
+function dbDoor(which, open) { const d = SHED.db[which]; d.open = open === undefined ? !d.open : open; updateShedUI(); }
+function setShedRoof(v) { SHED.roof.visible = v; updateShedUI(); }
+function updateShedUI() {
+    const $ = id => document.getElementById(id), S = SHED;
+    if ($('shed-door-status')) $('shed-door-status').innerText = S.doorOpen ? 'Door open' : 'Door closed';
+    if ($('btn-shed-door')) $('btn-shed-door').innerText = S.doorOpen ? 'Close door' : 'Open door';
+    if ($('btn-shed-lox')) $('btn-shed-lox').innerText = S.db.lox.open ? 'Close Loxone DB' : 'Open Loxone DB';
+    if ($('btn-shed-main')) $('btn-shed-main').innerText = S.db.main.open ? 'Close main DB' : 'Open main DB';
+    if ($('btn-shed-roof')) $('btn-shed-roof').innerText = S.roof.visible ? 'Roof cut-away' : 'Roof on';
+}
+function shedView(v) {
+    const S = SHED, cx = S.cx, cz = S.cz;
+    if (v === 'SHED') { animateCameraPosition(8.4, 3.4, 11.4, cx, 1.1, cz); return; }
+    shedDoor(true);
+    if (v === 'SHED_INV') animateCameraPosition(cx - 0.25, 1.6, cz + 0.45, cx + 1.45, 1.3, cz - 0.55);
+    else if (v === 'SHED_DB') { dbDoor('lox', true); animateCameraPosition(cx - 0.3, 1.5, cz + 0.65, cx - 0.55, 1.4, cz - 1.3); }
+    else if (v === 'SHED_MAINDB') { dbDoor('main', true); animateCameraPosition(cx + 0.3, 1.5, cz - 0.65, cx + 0.55, 1.4, cz + 1.3); }
+}
+function shedAnimate(dt) {
+    const S = SHED; if (!S.door) return;
+    const k = Math.min(1, dt * 4);
+    S.doorAng += ((S.doorOpen ? -1.75 : 0) - S.doorAng) * k; S.door.rotation.y = S.doorAng;
+    ['lox', 'main'].forEach(n => { const d = S.db[n]; d.ang += ((d.open ? -1.9 : 0) - d.ang) * k; d.door.rotation.y = d.ang; });
+    S.light.intensity += ((S.doorOpen ? 1.3 : 0) - S.light.intensity) * k;
+    walkUseCheck();
+}
+function extrasTick() {
+    const S = SHED; if (!S.door) return;
+    const net = solarGenerationKw - shedLoad();
+    S.bat = Math.max(15, Math.min(100, S.bat + net * 0.02));
+    drawInverter(); tablets.forEach(drawTablet); syncTablet();
+    const $ = id => document.getElementById(id);
+    if ($('shed-pv')) { $('shed-pv').innerText = solarGenerationKw.toFixed(1) + ' kW'; $('shed-load').innerText = shedLoad().toFixed(1) + ' kW'; $('shed-bat').innerText = Math.round(S.bat) + '%'; $('shed-grid').innerText = shedGrid(net).replace('Grid ', ''); }
+    if ($('battery-pct')) $('battery-pct').innerText = 'Battery: ' + Math.round(S.bat) + '%';
+}
+
+function buildExtras() {
+    buildBedLed();
+    buildShed();
+    siteDevice('GF', 'evcharger', -5.7, 0.8, 16.4, { room: 'Carport · EV bay', floorLabel: 'Site / carport', picks: [[-5.7, 0.8, 16.4, 0.5]] });
+    buildTablet('F2', 2.0, LEVEL.F2 + 1.3, -5.2375, 0, 'hall', 'Hall');
+    buildTablet('F2', 2.4375, LEVEL.F2 + 1.25, 0.9, -Math.PI / 2, 'master', 'Master Bedroom');
+    updateShedUI();
+}
+
+/* ---------- digital experience tour ---------- */
+const xp = { i: -1, playing: false, timer: null, tos: [], ivs: [] };
+function xpClear() { clearTimeout(xp.timer); xp.tos.forEach(clearTimeout); xp.ivs.forEach(clearInterval); xp.tos = []; xp.ivs = []; }
+function xpLater(fn, ms) { xp.tos.push(setTimeout(fn, ms)); }
+function xpBase() { if (walk.active) toggleWalk(false); setFloorFilter('ALL', true); exitCCTV(); }
+function xpShedClosed() { shedDoor(false); dbDoor('lox', false); dbDoor('main', false); }
+const XP_STEPS = [
+    { t: 'Welcome to Plot 1', d: 7000, x: 'One Loxone Miniserver ties together lighting, audio, security, the pool, cinema, EV charging and solar. This tour drives the live simulation, so everything you see is a real response.',
+      run() { xpBase(); triggerScene('DEFAULT'); if (isGateOpen) toggleMainGate(); xpShedClosed(); animateCameraPosition(-9, 3.4, 23.3, 1, 5, 5); } },
+    { t: 'Arrival: sliding gate', d: 6500, x: 'The automated gate opens from the Loxone app, the NFC reader or a tablet inside the house. The gate camera records every arrival.',
+      run() { xpBase(); animateCameraPosition(10, 3.0, 32, 6, 1.2, 22); if (!isGateOpen) toggleMainGate(); } },
+    { t: 'Front door: tap to enter', d: 6000, x: 'Tapping an NFC card unlocks the front door. The status light on the reader confirms access.',
+      run() { xpBase(); animateCameraPosition(10, 2.4, 20, 4.5, 3.4, 7.5); simulateNFCScan(); } },
+    { t: 'Welcome scene', d: 6500, x: 'The Dusk scene brings every RGBW light up to a warm white and opens the blinds. Scenes change the whole house in one tap.',
+      run() { xpBase(); triggerScene('DUSK'); animateCameraPosition(-9, 3.4, 23.3, 1, 5, 5); } },
+    { t: 'EV wallbox on Loxone', d: 7500, x: 'The wallbox is a Loxone device: the Miniserver starts charging from surplus solar and limits the current to protect the supply. Charging has just started.',
+      run() { xpBase(); animateCameraPosition(-3.4, 1.7, 21.2, -5.7, 0.8, 16.4); setEvChargeMode('solar'); if (!isEvCharging) toggleEvCharging(); } },
+    { t: 'Solar inverter & DB shed', d: 6500, x: 'A dedicated shed at the east boundary houses the hybrid inverter, battery and the distribution boards, away from the living spaces.',
+      run() { xpBase(); shedView('SHED'); xpLater(() => shedDoor(true), 1800); } },
+    { t: 'Hybrid inverter & battery', d: 7500, x: 'The inverter reports solar, battery, load and grid flow to the Miniserver over Modbus. Its screen shows the live values.',
+      run() { xpBase(); shedView('SHED_INV'); } },
+    { t: 'Loxone distribution board', d: 7500, x: 'Inside the Loxone board: the Miniserver, Extensions, dimmers and relays that run every circuit in the house. Door open for inspection.',
+      run() { xpBase(); dbDoor('main', false); shedView('SHED_DB'); } },
+    { t: 'Main distribution board', d: 7000, x: 'The main board holds the incomer, surge protection, the meter and the protection devices for each circuit.',
+      run() { xpBase(); dbDoor('lox', false); shedView('SHED_MAINDB'); } },
+    { t: 'Pool & deck', d: 7000, x: 'The Relax scene sets the underwater LEDs, plunge-pool light, deck bollards and pergola lights to a slow blue breathing effect.',
+      run() { xpBase(); xpShedClosed(); setPoolScene('relax'); animateCameraPosition(-24, 7, 16, -6, 1, 4); } },
+    { t: 'Basement cinema', d: 7500, x: 'The Movie scene closes the curtains, starts playback and dims the house, stair and star-ceiling lights to cinema levels.',
+      run() { xpBase(); setCameraView('CINEMA'); setCinemaScene('movie'); } },
+    { t: 'Hall control tablet', d: 8000, x: 'Loxone tablets sit in the hall and the master bedroom. Tap Night on this one and the whole house responds: lights drop to a blue night level and the blinds close.',
+      run() { setFloorFilter('F2', true); setCinemaScene('off'); animateCameraPosition(1.5, 8.5, -2.9, 2.0, 8.35, -5.2); xpLater(() => { triggerScene('NIGHT'); tablets.forEach(drawTablet); }, 2500); } },
+    { t: 'Master bed LED strip', d: 8500, x: 'An RGBW LED strip runs around the master bed and along the headboard. It is its own Loxone light circuit, so it can take any colour or level from the tablet.',
+      run() { setFloorFilter('F2', true); animateCameraPosition(-1.6, 9.1, 1.7, 1.3, 7.4, -1.2);
+          const cols = ['#a855f7', '#3b82f6', '#06b6d4', '#ec4899', '#ffd29a'], z = zones.bedled; let k = 0;
+          const go = () => { z.on = true; z.level = 75; z.color = cols[k++ % cols.length]; applyZone(z); syncZoneUI(); syncTablet(); }; go(); xp.ivs.push(setInterval(go, 1500)); } },
+    { t: 'Your turn: master tablet', d: 0, x: 'This is the master bedroom tablet. It opens now: change scenes, dim the bed strip, open the gate or start the EV charger and watch the house respond.',
+      run() { setFloorFilter('F2', true); animateCameraPosition(-0.3, 8.7, 1.9, 2.43, 8.3, 0.9); xpLater(() => openTablet(tablets.find(t => t.tab.key === 'master')), 1800); } }
+];
+function startExperienceTour() {
+    closeTablet(); mobileSheet(''); xpClear();
+    document.getElementById('xp-card').classList.remove('hidden');
+    xp.saved = { labels: roomLabelsOn, markers: markersOn };
+    roomLabelsOn = false; markersOn = false; xpUiSync(); refreshRoomLabels(); refreshMarkers();
+    xp.playing = true; xpGo(0);
+}
+function xpUiSync() { const a = document.getElementById("labels-toggle"), b = document.getElementById("markers-toggle"); if (a) a.checked = roomLabelsOn; if (b) b.checked = markersOn; }
+function xpGo(i) {
+    xpClear();
+    if (i >= XP_STEPS.length) { stopExperienceTour(); return; }
+    i = Math.max(0, i); xp.i = i; const s = XP_STEPS[i];
+    document.getElementById('xp-step').innerText = `${i + 1}/${XP_STEPS.length}`;
+    document.getElementById('xp-title').innerText = s.t; document.getElementById('xp-text').innerText = s.x;
+    document.getElementById('xp-bar').style.width = ((i + 1) / XP_STEPS.length * 100) + '%';
+    document.getElementById('xp-play').innerHTML = `<i class="fa-solid ${xp.playing && s.d ? 'fa-pause' : 'fa-play'}"></i>`;
+    try { s.run(); } catch (e) { console.error(e); }
+    if (xp.playing && s.d) xp.timer = setTimeout(() => xpGo(i + 1), s.d);
+}
+function xpToggle() {
+    xp.playing = !xp.playing; const s = XP_STEPS[xp.i];
+    document.getElementById('xp-play').innerHTML = `<i class="fa-solid ${xp.playing && s.d ? 'fa-pause' : 'fa-play'}"></i>`;
+    clearTimeout(xp.timer); if (xp.playing && s.d) xp.timer = setTimeout(() => xpGo(xp.i + 1), s.d);
+}
+function stopExperienceTour() {
+    xpClear(); xp.playing = false; xp.i = -1; document.getElementById('xp-card').classList.add('hidden'); closeTablet();
+    if (xp.saved) { roomLabelsOn = xp.saved.labels; markersOn = xp.saved.markers; xp.saved = null; xpUiSync(); refreshRoomLabels(); refreshMarkers(); }
 }
 
 window.onload = initScene;
