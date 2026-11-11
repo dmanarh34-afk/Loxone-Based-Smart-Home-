@@ -3124,7 +3124,7 @@ function setCameraView(view, keepFloor) {
     switch (view) {
         case 'FRONT': animateCameraPosition(-9, 3.4, 23.3, 1, 5, 5); break;
         case 'OVERVIEW': animateCameraPosition(32, 28, 40, 0, 3, 2); break;
-        case 'POOL': animateCameraPosition(-24, 7, 16, -6, 1, 4); break;
+        case 'POOL': animateCameraPosition(-4, 7.5, 18, -7, 0.8, 5); break;
         case 'LIVING': setFloorFilter('GF', true); animateCameraPosition(6, 9, 16, -0.5, 0.5, 4.5); break;
         case 'CINEMA': setFloorFilter('BSMT', true); switchTab('cinema'); animateCameraPosition(6.9, -0.6, 0.4, -1.5, -1.7, 1.78); break;
         case 'ENTRANCE': animateCameraPosition(10, 2.4, 20, 4.5, 3.4, 7.5); break;
@@ -3563,7 +3563,7 @@ function buildBedLed() {
 }
 
 /* ---------- inverter & DB shed ---------- */
-const SHED = { cx: 15.6, cz: 5.5, w: 3.2, d: 2.6, h: 2.6, doorOpen: false, doorAng: 0, door: null, roof: null, light: null, db: {}, bat: 92, inv: null };
+const SHED = { cx: 6, cz: -13.4, w: 3.2, d: 2.6, h: 2.6, doorOpen: false, doorAng: 0, door: null, roof: null, light: null, db: {}, bat: 92, inv: null };
 function dbLabelTexture(l1, l2, l3) {
     const cv = document.createElement('canvas'); cv.width = 256; cv.height = 340; const g = cv.getContext('2d');
     g.fillStyle = '#1f2933'; g.fillRect(0, 0, 256, 340);
@@ -3698,7 +3698,7 @@ function updateShedUI() {
 }
 function shedView(v) {
     const S = SHED, cx = S.cx, cz = S.cz;
-    if (v === 'SHED') { animateCameraPosition(8.4, 3.4, 11.4, cx, 1.1, cz); return; }
+    if (v === 'SHED') { animateCameraPosition(-6, 5.5, -9, cx, 1.1, cz); return; }
     shedDoor(true);
     if (v === 'SHED_INV') animateCameraPosition(cx - 0.25, 1.6, cz + 0.45, cx + 1.45, 1.3, cz - 0.55);
     else if (v === 'SHED_DB') { dbDoor('lox', true); animateCameraPosition(cx - 0.3, 1.5, cz + 0.65, cx - 0.55, 1.4, cz - 1.3); }
@@ -3748,7 +3748,7 @@ const XP_STEPS = [
       run() { xpBase(); triggerScene('DUSK'); animateCameraPosition(-9, 3.4, 23.3, 1, 5, 5); } },
     { t: 'EV wallbox on Loxone', d: 7500, x: 'The wallbox is a Loxone device: the Miniserver starts charging from surplus solar and limits the current to protect the supply. Charging has just started.',
       run() { xpBase(); animateCameraPosition(-3.4, 1.7, 21.2, -5.7, 0.8, 16.4); setEvChargeMode('solar'); if (!isEvCharging) toggleEvCharging(); } },
-    { t: 'Solar inverter & DB shed', d: 6500, x: 'A dedicated shed at the east boundary houses the hybrid inverter, battery and the distribution boards, away from the living spaces.',
+    { t: 'Solar inverter & DB shed', d: 6500, x: 'A dedicated shed behind the house, by the rear boundary wall, houses the hybrid inverter, battery and the distribution boards, away from the living spaces.',
       run() { xpBase(); shedView('SHED'); xpLater(() => shedDoor(true), 1800); } },
     { t: 'Hybrid inverter & battery', d: 7500, x: 'The inverter reports solar, battery, load and grid flow to the Miniserver over Modbus. Its screen shows the live values.',
       run() { xpBase(); shedView('SHED_INV'); } },
@@ -3757,7 +3757,7 @@ const XP_STEPS = [
     { t: 'Main distribution board', d: 7000, x: 'The main board holds the incomer, surge protection, the meter and the protection devices for each circuit.',
       run() { xpBase(); dbDoor('lox', false); shedView('SHED_MAINDB'); } },
     { t: 'Pool & deck', d: 7000, x: 'The Relax scene sets the underwater LEDs, plunge-pool light, deck bollards and pergola lights to a slow blue breathing effect.',
-      run() { xpBase(); xpShedClosed(); setPoolScene('relax'); animateCameraPosition(-24, 7, 16, -6, 1, 4); } },
+      run() { xpBase(); xpShedClosed(); setPoolScene('relax'); animateCameraPosition(-4, 7.5, 18, -7, 0.8, 5); } },
     { t: 'Basement cinema', d: 7500, x: 'The Movie scene closes the curtains, starts playback and dims the house, stair and star-ceiling lights to cinema levels.',
       run() { xpBase(); setCameraView('CINEMA'); setCinemaScene('movie'); } },
     { t: 'Hall control tablet', d: 8000, x: 'Loxone tablets sit in the hall and the master bedroom. Tap Night on this one and the whole house responds: lights drop to a blue night level and the blinds close.',
