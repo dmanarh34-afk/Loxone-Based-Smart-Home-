@@ -1,0 +1,5 @@
+{
+  "rewrites": [
+    { "source": "/", "destination": "/3d_smart_home_simulation.html" }
+  ]
+}
