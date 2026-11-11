@@ -40,6 +40,15 @@
         .panel-collapsed > *:not(.panel-handle) { display: none !important; }
         .panel-collapsed > .panel-handle i { transform: rotate(180deg); }
         @media (min-width: 768px) { .panel-handle { display: flex; } }
+        /* short desktop screens: panels scroll instead of being cut off */
+        @media (min-width: 768px) {
+            #left-panel { max-height: calc(100dvh - 190px); overflow-y: auto; overscroll-behavior: contain; padding-right: 2px; }
+            #right-panel { max-height: calc(100dvh - 190px) !important; }
+        }
+        @media (min-width: 768px) and (max-height: 800px) {
+            #left-panel .glass-panel { padding: 10px; gap: 6px; }
+            #left-panel .cam-btn, #left-panel .scene-btn { padding: 6px 8px; }
+        }
         .tb-btn { padding: 8px 6px; border-radius: 10px; font-weight: 700; font-size: 11px; background: #1e293b; border: 1px solid #334155; color: #e2e8f0; min-height: 40px; line-height: 1.2; }
         .tb-btn.on { background: #059669; border-color: #10b981; color: #fff; }
         .tb-btn:active { transform: scale(0.97); }
