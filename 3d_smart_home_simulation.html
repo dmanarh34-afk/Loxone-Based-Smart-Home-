@@ -896,21 +896,29 @@ function applyMarbleSkin(mats) {
         if (srgb) t.encoding = THREE.sRGBEncoding;
         cb(t); mats.forEach(m => m.needsUpdate = true);
     }, undefined, () => console.warn('marble texture failed:', file));
-    load('color.jpg', true, t => mats.forEach(m => m.map = t));
+    load('color.jpg', true, t => {
+        // desaturate the warm marble photo to grey/ash (veining kept); tints on the materials set the shade
+        const im = t.image, c = document.createElement('canvas'); c.width = im.width; c.height = im.height;
+        const g = c.getContext('2d'); g.drawImage(im, 0, 0);
+        const d = g.getImageData(0, 0, c.width, c.height), p = d.data;
+        for (let i = 0; i < p.length; i += 4) { const y = 0.299 * p[i] + 0.587 * p[i + 1] + 0.114 * p[i + 2]; p[i] = p[i + 1] = p[i + 2] = y; }
+        g.putImageData(d, 0, 0); t.image = c; t.needsUpdate = true;
+        mats.forEach(m => m.map = t);
+    });
     load('normal.jpg', false, t => mats.forEach(m => { m.normalMap = t; }));
     load('roughness.jpg', false, t => mats.forEach(m => { m.roughnessMap = t; m.roughness = 1; }));
 }
 function buildMaterials() {
-    // marble tints (texture unchanged): walls = darker modern warm grey, slabs = lighter, plinth = darkest
-    MAT.trav = new THREE.MeshStandardMaterial({ map: TEX.travertine, color: 0x8d9094, roughness: 0.82, metalness: 0.02 });
-    MAT.travDark = new THREE.MeshStandardMaterial({ map: TEX.travertine, color: 0x62666b, roughness: 0.85 });
+    // marble tints on the desaturated texture (see applyMarbleSkin): walls = mid ash grey, slabs = light ash, plinth = darkest
+    MAT.trav = new THREE.MeshStandardMaterial({ map: TEX.travertine, color: 0xa3a6a9, roughness: 0.82, metalness: 0.02 });
+    MAT.travDark = new THREE.MeshStandardMaterial({ map: TEX.travertine, color: 0x6f7276, roughness: 0.85 });
     MAT.carved = new THREE.MeshStandardMaterial({ map: TEX.carved, roughness: 0.9 });
     MAT.wood = new THREE.MeshStandardMaterial({ map: TEX.wood, roughness: 0.6 });
     MAT.green = new THREE.MeshStandardMaterial({ map: TEX.green, roughness: 0.95 });
     MAT.glass = new THREE.MeshStandardMaterial({ color: 0x9cc0d4, transparent: true, opacity: 0.26, roughness: 0.05, metalness: 0.5, depthWrite: false, side: THREE.DoubleSide });
     MAT.frame = new THREE.MeshStandardMaterial({ color: 0x2e2620, roughness: 0.5, metalness: 0.5 });
     MAT.blind = new THREE.MeshStandardMaterial({ color: 0xf1ece2, roughness: 0.95, side: THREE.DoubleSide });
-    MAT.slab = new THREE.MeshStandardMaterial({ map: TEX.travertine, color: 0xf2f3f4, roughness: 0.8 });
+    MAT.slab = new THREE.MeshStandardMaterial({ map: TEX.travertine, color: 0xe6e8ea, roughness: 0.8 });
     MAT.concrete = new THREE.MeshStandardMaterial({ map: TEX.concrete, roughness: 0.95 });
     MAT.plaster = new THREE.MeshStandardMaterial({ color: 0xf2efe9, roughness: 0.85 });
     MAT.deck = new THREE.MeshStandardMaterial({ map: TEX.deck, roughness: 0.8 });
