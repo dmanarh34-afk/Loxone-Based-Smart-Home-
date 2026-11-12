@@ -1668,7 +1668,33 @@ function loadMasterBedroom() {
         m.traverse(o => { if (o.isMesh) o.castShadow = o.receiveShadow = true; });
         m.rotation.y = -Math.PI / 2; m.position.set(MASTER_POS.x, LEVEL.F2 + MASTER_POS.lift, MASTER_POS.z);
         MASTER_OLD.forEach(p => p.parent && p.parent.remove(p));
-        floorGroups.F2.add(m);
+        floorGroups.F2.add(m); m.updateMatrixWorld(true);
+
+        // Floor: the model's own floor has holes and is coplanar with the rug sheet (z-fighting), so hide it and lay
+        // one marble floor (same texture) over the whole master room instead.
+        const RUG_LIFT = { FrontColor: 0.004, w098: 0.008 }; // distinct heights: floor < rug sheet < cowhide rug
+        let floorMat = null; const bed = new THREE.Box3(), rugs = [];
+        m.traverse(o => {
+            if (!o.isMesh) return;
+            const n = o.material.name;
+            if (n === 'w029') { floorMat = o.material; o.visible = false; }
+            else if (n === 'w031') bed.expandByObject(o);
+            else if (n in RUG_LIFT) rugs.push(o);
+        });
+        // rugs: lift clear of the floor and centre them on the bed's centre line
+        const bedZ = (bed.min.z + bed.max.z) / 2, v = new THREE.Vector3();
+        rugs.forEach(o => {
+            const c = new THREE.Box3().setFromObject(o).getCenter(new THREE.Vector3());
+            o.getWorldPosition(v); v.add(new THREE.Vector3(0, RUG_LIFT[o.material.name], bedZ - c.z)); o.parent.worldToLocal(v); o.position.copy(v);
+            Object.assign(o.material, { polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+        });
+        if (floorMat && floorMat.map) {
+            const a = IP('F2', 13, 193), b = IP('F2', 323, 587), w = Math.abs(b.x - a.x), d = Math.abs(b.z - a.z);
+            const tex = floorMat.map.clone(); tex.needsUpdate = true; tex.wrapS = tex.wrapT = THREE.RepeatWrapping; tex.repeat.set(w / 1.0, d / 1.0);
+            const fl = new THREE.Mesh(new THREE.PlaneGeometry(w, d), new THREE.MeshStandardMaterial({ map: tex, roughness: 0.4, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 }));
+            fl.rotation.x = -Math.PI / 2; fl.position.set((a.x + b.x) / 2, LEVEL.F2 + MASTER_POS.lift, (a.z + b.z) / 2); fl.receiveShadow = true;
+            floorGroups.F2.add(fl);
+        }
     }, undefined, e => console.warn('master bedroom model failed to load', e));
 }
 // plan-image px -> world. Each PLAN_TEXTURES image is the plan crop at 0.75 plan px per image px.
