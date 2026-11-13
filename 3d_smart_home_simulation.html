@@ -195,6 +195,8 @@
                 <button onclick="switchTab('cinema')" id="tab-btn-cinema" class="tab-btn"><i class="fa-solid fa-film text-base"></i><span>Cinema</span></button>
                 <button onclick="switchTab('security')" id="tab-btn-security" class="tab-btn"><i class="fa-solid fa-shield-halved text-base"></i><span>Security</span></button>
                 <button onclick="switchTab('energy')" id="tab-btn-energy" class="tab-btn"><i class="fa-solid fa-bolt text-base"></i><span>Site</span></button>
+                <button onclick="switchTab('estate')" id="tab-btn-estate" class="tab-btn"><i class="fa-solid fa-crown text-base"></i><span>Estate</span></button>
+                <button onclick="switchTab('leak')" id="tab-btn-leak" class="tab-btn"><i class="fa-solid fa-droplet text-base"></i><span>Leak</span></button>
             </div>
 
             <div class="p-4 overflow-y-auto flex-1 space-y-4 text-xs">
@@ -564,6 +566,12 @@
                     </div>
                     <p class="text-[10px] text-slate-500 italic">Pool lighting is under Light &amp; Audio; the basement cinema has its own tab.</p>
                 </div>
+
+                <!-- ESTATE (Premium package features, built by premium_features.js) -->
+                <div id="tab-content-estate" class="tab-content hidden space-y-4"></div>
+
+                <!-- LEAK DETECTION (TraceTek / TTK / RLE, built by premium_leak.js) -->
+                <div id="tab-content-leak" class="tab-content hidden space-y-4"></div>
             </div>
         </div>
     </div>
@@ -804,16 +812,16 @@ function canvasTex(w, h, draw, seed = 7) {
 const TEX = {};
 function buildTextures() {
     TEX.travertine = canvasTex(512, 512, (g, w, h, R) => {
-        g.fillStyle = '#dccdb3'; g.fillRect(0, 0, w, h);
-        for (let i = 0; i < 260; i++) { const a = 0.04 + R() * 0.09; g.fillStyle = R() < 0.55 ? `rgba(150,118,82,${a})` : `rgba(255,249,236,${a})`; g.fillRect(0, R() * h, w, 1 + R() * 5); }
-        for (let i = 0; i < 1100; i++) { g.fillStyle = `rgba(118,92,66,${0.05 + R() * 0.14})`; g.fillRect(R() * w, R() * h, 2 + R() * 16, 1); }
-        g.strokeStyle = 'rgba(105,86,64,0.35)'; g.lineWidth = 2;
-        for (let r = 0; r < 4; r++) { const y = r * h / 4; g.beginPath(); g.moveTo(0, y); g.lineTo(w, y); g.stroke();
-            for (let x = (r % 2) * w / 4; x <= w; x += w / 2) { g.beginPath(); g.moveTo(x, y); g.lineTo(x, y + h / 4); g.stroke(); } }
+        // modern smooth white render with fine panel joints
+        g.fillStyle = '#eceeef'; g.fillRect(0, 0, w, h);
+        for (let i = 0; i < 1500; i++) { g.fillStyle = `rgba(${R() < .5 ? '120,125,130' : '255,255,255'},${R() * 0.05})`; g.fillRect(R() * w, R() * h, 2, 2); }
+        g.strokeStyle = 'rgba(90,96,102,0.28)'; g.lineWidth = 2;
+        for (let y = 0; y <= h; y += h / 2) { g.beginPath(); g.moveTo(0, y); g.lineTo(w, y); g.stroke(); }
+        for (let x = 0; x <= w; x += w / 2) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x, h); g.stroke(); }
     }, 11);
     TEX.carved = canvasTex(256, 512, (g, w, h, R) => {
-        g.fillStyle = '#bcb5a8'; g.fillRect(0, 0, w, h);
-        for (let i = 0; i < 2500; i++) { g.fillStyle = `rgba(${R() < .5 ? '80,72,62' : '240,235,225'},${R() * 0.2})`; g.fillRect(R() * w, R() * h, 2, 2); }
+        g.fillStyle = '#3a3f45'; g.fillRect(0, 0, w, h);
+        for (let i = 0; i < 2500; i++) { g.fillStyle = `rgba(${R() < .5 ? '20,22,26' : '120,128,136'},${R() * 0.2})`; g.fillRect(R() * w, R() * h, 2, 2); }
         const step = h / 6;
         for (let k = 0; k < 6; k++) {
             const top = k * step, yc = top + step / 2;
@@ -889,18 +897,18 @@ function worldUV(geo, size) {
 const MAT = {};
 function buildMaterials() {
     MAT.trav = new THREE.MeshStandardMaterial({ map: TEX.travertine, roughness: 0.82, metalness: 0.02 });
-    MAT.travDark = new THREE.MeshStandardMaterial({ map: TEX.travertine, color: 0xb8aa92, roughness: 0.85 });
+    MAT.travDark = new THREE.MeshStandardMaterial({ map: TEX.travertine, color: 0x30353b, roughness: 0.75 });
     MAT.carved = new THREE.MeshStandardMaterial({ map: TEX.carved, roughness: 0.9 });
     MAT.wood = new THREE.MeshStandardMaterial({ map: TEX.wood, roughness: 0.6 });
     MAT.green = new THREE.MeshStandardMaterial({ map: TEX.green, roughness: 0.95 });
     MAT.glass = new THREE.MeshStandardMaterial({ color: 0x9cc0d4, transparent: true, opacity: 0.26, roughness: 0.05, metalness: 0.5, depthWrite: false, side: THREE.DoubleSide });
-    MAT.frame = new THREE.MeshStandardMaterial({ color: 0x2e2620, roughness: 0.5, metalness: 0.5 });
+    MAT.frame = new THREE.MeshStandardMaterial({ color: 0x15181c, roughness: 0.4, metalness: 0.6 });
     MAT.blind = new THREE.MeshStandardMaterial({ color: 0xf1ece2, roughness: 0.95, side: THREE.DoubleSide });
-    MAT.slab = new THREE.MeshStandardMaterial({ map: TEX.travertine, color: 0xece4d6, roughness: 0.8 });
+    MAT.slab = new THREE.MeshStandardMaterial({ map: TEX.travertine, color: 0x9aa0a6, roughness: 0.75 });
     MAT.concrete = new THREE.MeshStandardMaterial({ map: TEX.concrete, roughness: 0.95 });
     MAT.plaster = new THREE.MeshStandardMaterial({ color: 0xf2efe9, roughness: 0.85 });
     MAT.deck = new THREE.MeshStandardMaterial({ map: TEX.deck, roughness: 0.8 });
-    MAT.coping = new THREE.MeshStandardMaterial({ color: 0xe7e2d8, roughness: 0.7 });
+    MAT.coping = new THREE.MeshStandardMaterial({ color: 0x2b2f34, roughness: 0.6 });
     MAT.leaf = new THREE.MeshStandardMaterial({ color: 0x2f5d2a, roughness: 0.9, flatShading: true });
     MAT.leaf2 = new THREE.MeshStandardMaterial({ color: 0x4f7f32, roughness: 0.9, flatShading: true });
     MAT.trunk = new THREE.MeshStandardMaterial({ color: 0x5b4636, roughness: 0.95 });
@@ -985,7 +993,7 @@ function pointInPoly(pt, pts) {
 
 function glazing(parent, a, b, y0, h, inward, withBlind) {
     const dx = b.x - a.x, dz = b.z - a.z, len = Math.hypot(dx, dz);
-    wallSeg(parent, a, b, y0, h, MAT.glass, 0.05);
+    wallSeg(parent, a, b, y0, h, MAT.glass, 0.05).userData.glassPane = true; // tagged so the Estate tab can shatter it
     const n = Math.max(1, Math.round(len / 1.5));
     for (let k = 0; k <= n; k++) {
         const t = k / n, p = { x: a.x + dx * t, z: a.z + dz * t };
@@ -1004,6 +1012,7 @@ function glazing(parent, a, b, y0, h, inward, withBlind) {
 }
 
 function buildShell(f) {
+    const WM = (f === 'F2') ? MAT.travDark : MAT.trav; // light lower floors, dark upper floor
     const def = PLAN[f], pts = worldPoly(f, def.poly), grp = new THREE.Group(), tall = new THREE.Group();
     grp.add(tall); grp.userData.tall = tall;
     grp.position.y = LEVEL[f];
@@ -1015,13 +1024,13 @@ function buildShell(f) {
         const mid = { x: (a.x + b.x) / 2 + nx * 0.4, z: (a.z + b.z) / 2 + nz * 0.4 };
         const inward = pointInPoly(mid, pts) ? { x: nx, z: nz } : { x: -nx, z: -nz };
         switch (type) {
-            case 'w': case 'W2': wallSeg(tgt, a, b, 0, H, MAT.trav); break;
+            case 'w': case 'W2': wallSeg(tgt, a, b, 0, H, WM); break;
             case 'p':
-                wallSeg(grp, a, b, 0, 0.9, MAT.trav); wallSeg(grp, a, b, 2.6, H - 2.6, MAT.trav);
-                if (len > 1.2) glazing(grp, a, b, 0.9, 1.7, inward, true); else wallSeg(grp, a, b, 0.9, 1.7, MAT.trav);
+                wallSeg(grp, a, b, 0, 0.9, WM); wallSeg(grp, a, b, 2.6, H - 2.6, WM);
+                if (len > 1.2) glazing(grp, a, b, 0.9, 1.7, inward, true); else wallSeg(grp, a, b, 0.9, 1.7, WM);
                 break;
             case 'g': case 'G2':
-                wallSeg(tgt, a, b, H - 0.3, 0.3, MAT.trav); glazing(tgt, a, b, 0, H - 0.3, inward, true); break;
+                wallSeg(tgt, a, b, H - 0.3, 0.3, WM); glazing(tgt, a, b, 0, H - 0.3, inward, true); break;
             case 'r':
                 wallSeg(grp, a, b, 0, 1.1, MAT.glass, 0.04); wallSeg(grp, a, b, 1.1, 0.05, MAT.frame, 0.08); break;
         }
@@ -1064,13 +1073,13 @@ function buildBuilding() {
     buildShell('F2');
     // terrace parapets around the first-floor roof
     const parapet = new THREE.Group(); parapet.position.y = LEVEL.F2;
-    f1Pts.forEach((a, i) => wallSeg(parapet, a, f1Pts[(i + 1) % f1Pts.length], 0, 0.5, MAT.trav, 0.2));
+    f1Pts.forEach((a, i) => wallSeg(parapet, a, f1Pts[(i + 1) % f1Pts.length], 0, 0.5, MAT.travDark, 0.2));
     floorGroups.F2.add(parapet);
 
     // ---- Roof
-    slab(f2Pts, LEVEL.ROOF + 0.4, 0.4, MAT.trav, floorGroups.ROOF);
+    slab(f2Pts, LEVEL.ROOF + 0.4, 0.4, MAT.travDark, floorGroups.ROOF);
     const rp = new THREE.Group(); rp.position.y = LEVEL.ROOF + 0.4;
-    f2Pts.forEach((a, i) => wallSeg(rp, a, f2Pts[(i + 1) % f2Pts.length], 0, 0.55, MAT.trav, 0.3));
+    f2Pts.forEach((a, i) => wallSeg(rp, a, f2Pts[(i + 1) % f2Pts.length], 0, 0.55, MAT.travDark, 0.3));
     floorGroups.ROOF.add(rp);
 
     buildFrontFeatures(lA, lB);
@@ -1689,7 +1698,7 @@ function addFurniture(f, low, tall, [type, ix0, iy0, ix1, iy1, dir = 'N']) {
         case 'dresser': P(0, D, 0, Wd, 0, 0.8, FMAT.woodLight); break;
         case 'night': P(0, D, 0, Wd, 0, 0.55, FMAT.wood); break;
         case 'bench': P(0, D, 0, Wd, 0, 0.45, FMAT.woodLight); P(D * 0.55, D, 0, Wd, 0.45, 0.9, FMAT.woodLight); break;
-        case 'rug': P(0, D, 0, Wd, 0, 0.012, FMAT.rug); break;
+        case 'rug': P(0, D, 0, Wd, 0.012, 0.03, FMAT.rug); break;
         case 'chair':
             P(0, D, 0, Wd, 0.42, 0.47, FMAT.fabricDark); P(D - 0.05, D, 0, Wd, 0.47, 0.92, FMAT.fabricDark);
             [[0.02, 0.02], [0.02, Wd - 0.06], [D - 0.06, 0.02], [D - 0.06, Wd - 0.06]].forEach(([u, v]) => P(u, u + 0.04, v, v + 0.04, 0, 0.42, FMAT.dark)); break;
@@ -2111,7 +2120,7 @@ function buildSite() {
     const padConc = new THREE.MeshStandardMaterial({ map: TEX.travertine, color: 0x9d988f, roughness: 0.85 });
     const padAsph = new THREE.MeshStandardMaterial({ color: 0x3a3d42, roughness: 0.95 });
     addParkingPad(-12.6, -4.2, 12.9, 23.6, [-12.0, -9.0, -6.0], 'WN', padConc);
-    addParkingPad(11.5, 18.5, 11.5, 20.5, [12.0, 15.0, 18.0], 'NES', padAsph);
+    addParkingPad(11.5, 18.5, 14.5, 20.5, [12.0, 15.0, 18.0], 'NES', padAsph);   // moved south: the garage lane runs north from the paving beside it
     addLuxuryCar(-10.5, 16.0, Math.PI / 2, 0x1b2a44, 0xc9cdd3);   // midnight blue, silver upper
     addLuxuryCar(-7.5, 16.0, Math.PI / 2, 0x0b0b0c, 0x0b0b0c);   // black, on the EV charger bay
 
@@ -2147,8 +2156,8 @@ function buildSite() {
     evChargerLight.position.set(-5.7, 1.05, 16.4); siteGroup.add(evChargerLight);
 
     // planting
-    addTree(-16, 9, 1.25); addTree(-15, -9, 1.0); addTree(15.5, -11, 1.1);
-    addPalm(19.0, 22.4, 6.5); addPalm(12.4, 0.2, 7.5); addPalm(-17.5, 21, 6); addPalm(13.5, -4, 6.8);
+    addTree(-16, 9, 1.25); addTree(-15, -9, 1.0); addTree(18.8, -6.0, 1.0);
+    addPalm(19.0, 22.4, 6.5); addPalm(17.4, 0.2, 7.5); addPalm(-17.5, 21, 6); addPalm(18.0, -4.2, 6.8);
     for (let i = 0; i < 10; i++) addShrub(-19.3 + Math.random() * 2, 10 + Math.random() * 12, 0.5 + Math.random() * 0.3);
     for (let i = 0; i < 8; i++) { const sx = 16 + Math.random() * 3, sz = Math.random() * 9; if (sx > 13.2 && sx < 18.2 && sz > 2.4 && sz < 8.6) continue; addShrub(sx, sz, 0.6 + Math.random() * 0.4); }
 
@@ -3333,6 +3342,7 @@ function animate() {
     shedAnimate(dt);
     if (waterLevelMesh) waterLevelMesh.scale.y += (tankTarget - waterLevelMesh.scale.y) * 0.03;
     animateCinema(dt, t);
+    if (typeof premiumTick === 'function') premiumTick(dt, t);
     updatePoolLights(t);
     if (TEX.water) { TEX.water.offset.x = t * 0.02; TEX.water.offset.y = Math.sin(t * 0.5) * 0.03; }
     if (isIrrigationActive) { const p = waterParticles.geometry.attributes.position.array; for (let i = 1; i < p.length; i += 3) { p[i] -= 0.04; if (p[i] < 0) p[i] = 1.8; } waterParticles.geometry.attributes.position.needsUpdate = true; }
@@ -3344,11 +3354,13 @@ function animate() {
         document.getElementById('solar-bar').style.width = Math.min(100, kw / 6 * 100) + '%';
         updateEvChargerUI();
         cinemaClimateTick(0.5); updateCinemaUI(); extrasTick();
+        if (typeof premiumSlowTick === 'function') premiumSlowTick();
     }
 
     updateEvChargerUI(dt);
     updateTooltip();
     renderer.render(scene, camera);
+    if (typeof cineComposite === 'function') cineComposite();
 }
 
 function onWindowResize() {
@@ -3798,7 +3810,11 @@ function stopExperienceTour() {
     if (xp.saved) { roomLabelsOn = xp.saved.labels; markersOn = xp.saved.markers; xp.saved = null; xpUiSync(); refreshRoomLabels(); refreshMarkers(); }
 }
 
-window.onload = initScene;
+window.onload = function () { initScene(); if (typeof premiumInit === 'function') premiumInit(); };
 </script>
+<script src="premium_features.js"></script>
+<script src="premium_fx.js"></script>
+<script src="premium_leak.js"></script>
+<script src="premium_cine.js"></script>
 </body>
 </html>
