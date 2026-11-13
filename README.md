@@ -27,7 +27,6 @@ Opens http://localhost:8000/3d_smart_home_simulation.html. Internet is needed: T
 |---|---|
 | `3d_smart_home_simulation.html` | The whole app (HTML, CSS, JS) |
 | `plan_textures.js` | Floor plan texture data |
-| `3d_smart_home_simulation.backup.html` | Older copy of the app |
 | `building drawings/` | Source plans and reference pictures |
 
 ## Notes
