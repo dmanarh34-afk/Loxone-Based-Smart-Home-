@@ -10,6 +10,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
     <!-- Floor plan images cropped from the IBS Loxone drawings (generated file, keep next to this page) -->
     <script src="plan_textures.js"></script>
 
@@ -895,20 +896,42 @@ function worldUV(geo, size) {
    4. MATERIALS
 ===================================================================== */
 const MAT = {};
+// CGAxis "Beige Marble 7967" PBR set (2K). Swaps in when loaded; procedural travertine stays on load error.
+function applyMarbleSkin(mats) {
+    const L = new THREE.TextureLoader(), maxA = 8;
+    const load = (file, srgb, cb) => L.load('textures/marble/' + file, t => {
+        t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = maxA;
+        if (srgb) t.encoding = THREE.sRGBEncoding;
+        cb(t); mats.forEach(m => m.needsUpdate = true);
+    }, undefined, () => console.warn('marble texture failed:', file));
+    load('color.jpg', true, t => {
+        // desaturate the warm marble photo to grey/ash (veining kept); tints on the materials set the shade
+        const im = t.image, c = document.createElement('canvas'); c.width = im.width; c.height = im.height;
+        const g = c.getContext('2d'); g.drawImage(im, 0, 0);
+        const d = g.getImageData(0, 0, c.width, c.height), p = d.data;
+        for (let i = 0; i < p.length; i += 4) { const y = 0.299 * p[i] + 0.587 * p[i + 1] + 0.114 * p[i + 2]; p[i] = p[i + 1] = p[i + 2] = y; }
+        g.putImageData(d, 0, 0); t.image = c; t.needsUpdate = true;
+        mats.forEach(m => m.map = t);
+    });
+    load('normal.jpg', false, t => mats.forEach(m => { m.normalMap = t; }));
+    load('roughness.jpg', false, t => mats.forEach(m => { m.roughnessMap = t; m.roughness = 1; }));
+}
 function buildMaterials() {
-    MAT.trav = new THREE.MeshStandardMaterial({ map: TEX.travertine, roughness: 0.82, metalness: 0.02 });
-    MAT.travDark = new THREE.MeshStandardMaterial({ map: TEX.travertine, color: 0x30353b, roughness: 0.75 });
+    // marble tints on the desaturated texture (see applyMarbleSkin): walls = mid ash grey, slabs = light ash, plinth = darkest
+    MAT.trav = new THREE.MeshStandardMaterial({ map: TEX.travertine, color: 0xa3a6a9, roughness: 0.82, metalness: 0.02 });
+    MAT.travDark = new THREE.MeshStandardMaterial({ map: TEX.travertine, color: 0x6f7276, roughness: 0.85 });
     MAT.carved = new THREE.MeshStandardMaterial({ map: TEX.carved, roughness: 0.9 });
     MAT.wood = new THREE.MeshStandardMaterial({ map: TEX.wood, roughness: 0.6 });
     MAT.green = new THREE.MeshStandardMaterial({ map: TEX.green, roughness: 0.95 });
     MAT.glass = new THREE.MeshStandardMaterial({ color: 0x9cc0d4, transparent: true, opacity: 0.26, roughness: 0.05, metalness: 0.5, depthWrite: false, side: THREE.DoubleSide });
     MAT.frame = new THREE.MeshStandardMaterial({ color: 0x15181c, roughness: 0.4, metalness: 0.6 });
     MAT.blind = new THREE.MeshStandardMaterial({ color: 0xf1ece2, roughness: 0.95, side: THREE.DoubleSide });
-    MAT.slab = new THREE.MeshStandardMaterial({ map: TEX.travertine, color: 0x9aa0a6, roughness: 0.75 });
+    MAT.slab = new THREE.MeshStandardMaterial({ map: TEX.travertine, color: 0xe6e8ea, roughness: 0.8 });
     MAT.concrete = new THREE.MeshStandardMaterial({ map: TEX.concrete, roughness: 0.95 });
     MAT.plaster = new THREE.MeshStandardMaterial({ color: 0xf2efe9, roughness: 0.85 });
     MAT.deck = new THREE.MeshStandardMaterial({ map: TEX.deck, roughness: 0.8 });
-    MAT.coping = new THREE.MeshStandardMaterial({ color: 0x2b2f34, roughness: 0.6 });
+    MAT.coping = new THREE.MeshStandardMaterial({ color: 0xe7e2d8, roughness: 0.7 });
+    applyMarbleSkin([MAT.trav, MAT.travDark, MAT.slab]);
     MAT.leaf = new THREE.MeshStandardMaterial({ color: 0x2f5d2a, roughness: 0.9, flatShading: true });
     MAT.leaf2 = new THREE.MeshStandardMaterial({ color: 0x4f7f32, roughness: 0.9, flatShading: true });
     MAT.trunk = new THREE.MeshStandardMaterial({ color: 0x5b4636, roughness: 0.95 });
@@ -1272,17 +1295,40 @@ function addReclinerUnit(parent, leather, x, z0, z1, y) {
     [z0 + 0.1, zc, z1 - 0.1].forEach(z => box(0.86, 0.22, 0.2, leather, x + 0.02, y + 0.55, z, parent));
     [z0 + 0.2 + (w - 0.4) * 0.25, z0 + 0.2 + (w - 0.4) * 0.75].forEach(z => box(0.16, 0.34, 0.42, FMAT.linen || leather, x + 0.16, y + 0.62, z, parent));
 }
+// CGAxis "Beige Modern Sofa" GLB (models/sofa.glb). Box sofas are built first as a fallback and
+// swapped for the model once it loads; if loading fails the box sofas simply stay.
+const SOFA_SCALE = 1.5; // multiplier on top of the fit-to-rectangle size
+const SOFA = { root: null, size: null, jobs: [], failed: false };
+function loadSofaModel() {
+    new THREE.GLTFLoader().load('models/sofa.glb', g => {
+        const root = g.scene;
+        // the GLB's normal maps render as black speckle on cushions/blanket in r128, so drop them
+        root.traverse(o => { if (o.isMesh) { o.castShadow = o.receiveShadow = true; o.material.normalMap = null; } });
+        SOFA.root = root; SOFA.size = new THREE.Box3().setFromObject(root).getSize(new THREE.Vector3());
+        SOFA.jobs.splice(0).forEach(j => j());
+    }, undefined, e => { SOFA.failed = true; SOFA.jobs.length = 0; console.warn('sofa model failed to load', e); });
+}
+// Replace `parts` (fallback meshes) with a sofa model at (x, y, z) facing (fx, fz), fitted into width x maxDepth.
+function sofaSwap(parent, parts, x, y, z, fx, fz, width, maxDepth) {
+    const job = () => {
+        parts.forEach(p => p.parent && p.parent.remove(p));
+        const m = SOFA.root.clone(true), s = Math.min(width / SOFA.size.x, maxDepth / SOFA.size.z) * SOFA_SCALE;
+        m.scale.setScalar(s); m.position.set(x, y, z); m.rotation.y = Math.atan2(fx, fz); parent.add(m);
+    };
+    if (SOFA.root) job(); else if (!SOFA.failed) SOFA.jobs.push(job);
+}
 // curved sofa: segments on an arc around (cx, cz), seat facing the centre
 function addCurvedSofa(parent, mat, cx, cz, r, a0, a1, y) {
-    const n = 16;
+    const n = 16, made = [];
     for (let i = 0; i < n; i++) {
         const a = a0 + (a1 - a0) * (i + 0.5) / n, segL = r * Math.abs(a1 - a0) / n + 0.06;
         const g = new THREE.Group(); g.position.set(cx + Math.cos(a) * r, y, cz + Math.sin(a) * r); g.rotation.y = -a;
         box(0.85, 0.42, segL, mat, 0, 0.21, 0, g);          // seat (local x points outwards)
         box(0.24, 0.42, segL, mat, 0.32, 0.63, 0, g);       // back
         if (i === 0 || i === n - 1) box(0.85, 0.2, 0.18, mat, 0, 0.52, (i === 0 ? -1 : 1) * (segL / 2 - 0.09) * Math.sign(a1 - a0), g);
-        parent.add(g);
+        parent.add(g); made.push(g);
     }
+    return made;
 }
 function addPlant(parent, x, z, y, s = 1) {
     const pot = new THREE.Mesh(new THREE.CylinderGeometry(0.22 * s, 0.17 * s, 0.45 * s, 16), new THREE.MeshStandardMaterial({ color: 0xc9c4ba, roughness: 0.9 }));
@@ -1395,8 +1441,9 @@ function buildBasementCinema() {
     // lounge (north-east): curved sofas facing each other, oval coffee table, rug, side tables, art, console
     const lx = 5.65, lz = -0.7;
     box(3.0, 0.012, 2.8, mat(0xe9e2d3, { roughness: 1 }), lx, f + 0.02, lz, group);
-    addCurvedSofa(group, beige, lx, lz, 1.25, -Math.PI * 0.8, -Math.PI * 0.2, f);
-    addCurvedSofa(group, beige, lx, lz, 1.25, Math.PI * 0.2, Math.PI * 0.8, f);
+    // two straight sofas (north and south of the coffee table) replace the curved box sofas
+    sofaSwap(group, addCurvedSofa(group, beige, lx, lz, 1.25, -Math.PI * 0.8, -Math.PI * 0.2, f), lx, f, lz - 1.2, 0, 1, 2.0, 1.2);
+    sofaSwap(group, addCurvedSofa(group, beige, lx, lz, 1.25, Math.PI * 0.2, Math.PI * 0.8, f), lx, f, lz + 1.2, 0, -1, 2.0, 1.2);
     const ct = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 0.05, 32), mat(0xe7e1d6, { roughness: 0.3 })); ct.scale.set(1.3, 1, 0.8); ct.position.set(lx, f + 0.4, lz); group.add(ct);
     const ctb = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.38, 24), MAT.devDark); ctb.scale.set(1.3, 1, 0.8); ctb.position.set(lx, f + 0.19, lz); group.add(ctb);
     [[lx - 1.65, lz - 0.95], [lx + 1.65, lz + 0.95]].forEach(([x, z]) => { const t = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.24, 0.04, 20), MAT.wood); t.position.set(x, f + 0.55, z); group.add(t); const p = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.55, 8), brass); p.position.set(x, f + 0.27, z); group.add(p); });
@@ -1629,6 +1676,45 @@ const INTERIOR = {
 /* =====================================================================
    INTERIOR: partition walls + furniture from the plans
 ===================================================================== */
+// Master bedroom set (D5 Works "Modern Minimalist Bedroom", converted SketchUp -> GLB: bed, nightstands, rug, art,
+// wood slats, accent wall, pendants, armchair). Model origin = centre of the head wall on the floor, room runs along +z.
+// Placed with the head wall on the master room's east wall (same side as the old bed), rotated -90deg.
+const MASTER_OLD = [], MASTER_POS = { x: 2.64, z: -1.19, lift: 0.012 };
+function loadMasterBedroom() {
+    new THREE.GLTFLoader().load('models/master_bedroom.glb', g => {
+        const m = g.scene;
+        m.traverse(o => { if (o.isMesh) o.castShadow = o.receiveShadow = true; });
+        m.rotation.y = -Math.PI / 2; m.position.set(MASTER_POS.x, LEVEL.F2 + MASTER_POS.lift, MASTER_POS.z);
+        MASTER_OLD.forEach(p => p.parent && p.parent.remove(p));
+        floorGroups.F2.add(m); m.updateMatrixWorld(true);
+
+        // Floor: the model's own floor has holes and is coplanar with the rug sheet (z-fighting), so hide it and lay
+        // one marble floor (same texture) over the whole master room instead.
+        const RUG_LIFT = { FrontColor: 0.004, w098: 0.008 }; // distinct heights: floor < rug sheet < cowhide rug
+        let floorMat = null; const bed = new THREE.Box3(), rugs = [];
+        m.traverse(o => {
+            if (!o.isMesh) return;
+            const n = o.material.name;
+            if (n === 'w029') { floorMat = o.material; o.visible = false; }
+            else if (n === 'w031') bed.expandByObject(o);
+            else if (n in RUG_LIFT) rugs.push(o);
+        });
+        // rugs: lift clear of the floor and centre them on the bed's centre line
+        const bedZ = (bed.min.z + bed.max.z) / 2, v = new THREE.Vector3();
+        rugs.forEach(o => {
+            const c = new THREE.Box3().setFromObject(o).getCenter(new THREE.Vector3());
+            o.getWorldPosition(v); v.add(new THREE.Vector3(0, RUG_LIFT[o.material.name], bedZ - c.z)); o.parent.worldToLocal(v); o.position.copy(v);
+            Object.assign(o.material, { polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+        });
+        if (floorMat && floorMat.map) {
+            const a = IP('F2', 13, 193), b = IP('F2', 323, 587), w = Math.abs(b.x - a.x), d = Math.abs(b.z - a.z);
+            const tex = floorMat.map.clone(); tex.needsUpdate = true; tex.wrapS = tex.wrapT = THREE.RepeatWrapping; tex.repeat.set(w / 1.0, d / 1.0);
+            const fl = new THREE.Mesh(new THREE.PlaneGeometry(w, d), new THREE.MeshStandardMaterial({ map: tex, roughness: 0.4, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 }));
+            fl.rotation.x = -Math.PI / 2; fl.position.set((a.x + b.x) / 2, LEVEL.F2 + MASTER_POS.lift, (a.z + b.z) / 2); fl.receiveShadow = true;
+            floorGroups.F2.add(fl);
+        }
+    }, undefined, e => console.warn('master bedroom model failed to load', e));
+}
 // plan-image px -> world. Each PLAN_TEXTURES image is the plan crop at 0.75 plan px per image px.
 const PLAN_IMG = { GF: [300, 130], F1: [120, 95], F2: [520, 215] };
 function IP(f, ix, iy) { const o = PLAN_IMG[f]; return W(f, o[0] + ix * 0.75, o[1] + iy * 0.75); }
@@ -1670,9 +1756,14 @@ function addFurniture(f, low, tall, [type, ix0, iy0, ix1, iy1, dir = 'N']) {
             else P(D - 0.45, D - 0.12, 0.1, Wd - 0.1, 0.52, 0.64, FMAT.linen);
             P(D - 0.08, D, 0, Wd, 0, 1.15, FMAT.fabricDark); break;
         case 'sofa': case 'armchair':
-            P(0.03, D - 0.03, 0.03, Wd - 0.03, 0, 0.14, FMAT.dark); P(0, D, 0, Wd, 0.14, 0.44, FMAT.fabric);
-            P(D - 0.22, D, 0, Wd, 0.14, 0.86, FMAT.fabric);
-            P(0, D, 0, 0.17, 0.14, 0.64, FMAT.fabric); P(0, D, Wd - 0.17, Wd, 0.14, 0.64, FMAT.fabric); break;
+            const parts = [P(0.03, D - 0.03, 0.03, Wd - 0.03, 0, 0.14, FMAT.dark), P(0, D, 0, Wd, 0.14, 0.44, FMAT.fabric),
+                P(D - 0.22, D, 0, Wd, 0.14, 0.86, FMAT.fabric),
+                P(0, D, 0, 0.17, 0.14, 0.64, FMAT.fabric), P(0, D, Wd - 0.17, Wd, 0.14, 0.64, FMAT.fabric)];
+            if (type === 'sofa') { // back is on the `dir` side, so the sofa faces the opposite way
+                const face = { N: [0, 1], S: [0, -1], E: [-1, 0], W: [1, 0] }[dir];
+                sofaSwap(low, parts, (x0 + x1) / 2, 0, (z0 + z1) / 2, face[0], face[1], Wd, D);
+            }
+            break;
         case 'toilet':
             P(0, D - 0.18, Wd * 0.18, Wd * 0.82, 0, 0.42, FMAT.ceramic); P(D - 0.18, D, Wd * 0.08, Wd * 0.92, 0, 0.82, FMAT.ceramic); break;
         case 'vanity':
@@ -1728,7 +1819,11 @@ function buildInterior() {
             box(sx, H, sz, FMAT.wall, cx, H / 2, cz, shell);
         });
         const low = new THREE.Group(); low.position.y = LEVEL[f];
-        INTERIOR[f].furniture.forEach(it => addFurniture(f, low, shell, it));
+        INTERIOR[f].furniture.forEach(it => {
+            const n0 = low.children.length; addFurniture(f, low, shell, it);
+            // master bedroom bed set is replaced by models/master_bedroom.glb once it loads
+            if (f === 'F2' && ['bed', 'night', 'console'].includes(it[0])) MASTER_OLD.push(...low.children.slice(n0));
+        });
         floorGroups[f].add(low);
     });
 }
@@ -2080,10 +2175,42 @@ function addParkingPad(x0, x1, z0, z1, bayEdgesX, kerbs, mat, bayLen = 5.6) {
     if (kerbs.includes('S')) box(x1 - x0 + 2 * k, h, k, conc, (x0 + x1) / 2, h / 2, z1 + k / 2, siteGroup);
 }
 
+// CGAxis "Short Grass" patch (models/grass.glb, decimated to 2.5k tris) scattered on the lawn as one InstancedMesh.
+// Spots inside the footprint of anything touching ground level (paving, pool, walls, drive) are skipped.
+let lawnMesh = null;
+function scatterGrass() {
+    new THREE.GLTFLoader().load('models/grass.glb', g => {
+        let geo = null; g.scene.updateMatrixWorld(true);
+        g.scene.traverse(o => { if (o.isMesh && !geo) geo = o.geometry.clone().applyMatrix4(o.matrixWorld); }); // bake the node scale (GLB is in cm)
+        if (!geo) return;
+        geo.computeVertexNormals();
+        const mat = new THREE.MeshStandardMaterial({ color: 0x5c8a2e, roughness: 0.95, side: THREE.DoubleSide });
+        scene.updateMatrixWorld(true);
+        const blocks = [], PAD = 0.25;
+        [siteGroup, extGroup, ...Object.values(floorGroups)].forEach(root => root.traverse(o => {
+            if (!o.isMesh || o === lawnMesh) return;
+            const b = new THREE.Box3().setFromObject(o);
+            if (b.min.y < 1 && b.max.y > -0.3 && b.max.x - b.min.x < 80 && b.max.z - b.min.z < 80) blocks.push(b);
+        }));
+        const bs = worldPoly('BSMT', PLAN.BSMT.poly), bb = new THREE.Box3();
+        bs.forEach(p => bb.expandByPoint(new THREE.Vector3(p.x, 0, p.z))); bb.min.y = -9; bb.max.y = 9; blocks.push(bb);
+        const R = rng(42), range = (window.matchMedia('(pointer: coarse)').matches || window.innerWidth < 768) ? 16 : 26, step = 1.5, pts = [];
+        for (let x = -range; x <= range; x += step) for (let z = -range + 6; z <= range + 6; z += step) {
+            const px = x + (R() - 0.5) * step * 0.8, pz = z + (R() - 0.5) * step * 0.8;
+            if (!blocks.some(b => px > b.min.x - PAD && px < b.max.x + PAD && pz > b.min.z - PAD && pz < b.max.z + PAD)) pts.push([px, pz]);
+        }
+        const im = new THREE.InstancedMesh(geo, mat, pts.length), m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), s = new THREE.Vector3(), p = new THREE.Vector3();
+        pts.forEach(([x, z], i) => {
+            const k = 0.95 + R() * 0.35; e.set(0, R() * Math.PI * 2, 0); q.setFromEuler(e);
+            m.compose(p.set(x, -0.01, z), q, s.set(k, k * (0.8 + R() * 0.4), k)); im.setMatrixAt(i, m);
+        });
+        im.receiveShadow = true; im.frustumCulled = false; siteGroup.add(im);
+    }, undefined, e => console.warn('grass model failed to load', e));
+}
 function buildSite() {
     // lawn with the basement footprint cut out, so the basement stair is visible through its GF opening
     const lawnGeo = new THREE.ShapeGeometry(shapeFrom([{ x: -45, z: -45 }, { x: 45, z: -45 }, { x: 45, z: 45 }, { x: -45, z: 45 }], [worldPoly('BSMT', PLAN.BSMT.poly)]));
-    const lawn = new THREE.Mesh(lawnGeo, new THREE.MeshStandardMaterial({ map: TEX.grass, roughness: 1 }));
+    const lawn = lawnMesh = new THREE.Mesh(lawnGeo, new THREE.MeshStandardMaterial({ map: TEX.grass, roughness: 1 }));
     TEX.grass.repeat.set(1 / 3, 1 / 3); lawn.rotation.x = -Math.PI / 2; lawn.position.y = -0.01; lawn.receiveShadow = true; siteGroup.add(lawn);
 
     const pavTex = TEX.pavers.clone(); pavTex.needsUpdate = true; pavTex.repeat.set(23 / 2.4, 14 / 2.4);
@@ -2453,9 +2580,9 @@ function initScene() {
     Object.assign(sunLight.shadow.camera, { near: 1, far: 200, left: -35, right: 35, top: 35, bottom: -35 });
     sunLight.shadow.bias = -0.0005; sunLight.shadow.camera.updateProjectionMatrix(); scene.add(sunLight, sunLight.target);
 
-    buildTextures(); buildMaterials(); buildDeviceGeometry();
+    loadSofaModel(); buildTextures(); buildMaterials(); buildDeviceGeometry();
     scene.add(siteGroup, extGroup); Object.values(floorGroups).forEach(g => scene.add(g));
-    buildSite(); buildBuilding(); buildStaircases(); buildInterior(); buildBasementCinema(); buildRoomLabels(); restorePanels(); buildDevices(); buildRoomLights(); buildExtras(); setupCCTVSystem(); setupParticles();
+    buildSite(); buildBuilding(); buildStaircases(); buildInterior(); buildBasementCinema(); buildRoomLabels(); restorePanels(); buildDevices(); buildRoomLights(); buildExtras(); setupCCTVSystem(); setupParticles(); scatterGrass(); loadMasterBedroom();
 
     raycaster = new THREE.Raycaster();
     renderer.domElement.addEventListener('pointermove', onPointerMove);
