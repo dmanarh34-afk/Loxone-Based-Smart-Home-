@@ -10,6 +10,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/TrackballControls.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
     <!-- Floor plan images cropped from the IBS Loxone drawings (generated file, keep next to this page) -->
     <script src="plan_textures.js"></script>
@@ -216,6 +217,14 @@
                         <div class="flex justify-between items-center">
                             <span class="font-semibold text-slate-200">X-ray markers in full view</span>
                             <input type="checkbox" id="xray-toggle" onchange="xrayOn = this.checked; refreshMarkers()" class="accent-emerald-500 h-4 w-4">
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span class="font-semibold text-slate-200">Free rotation (all axes)</span>
+                            <input type="checkbox" id="freerot-toggle" checked onchange="setFreeRotation(this.checked)" class="accent-emerald-500 h-4 w-4">
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span class="font-semibold text-slate-200">Boundary wall &amp; gate</span>
+                            <input type="checkbox" id="fence-toggle" checked onchange="toggleFence(this.checked)" class="accent-emerald-500 h-4 w-4">
                         </div>
                         <div class="flex justify-between items-center">
                             <span class="font-semibold text-slate-200">Room names (single floor)</span>
@@ -779,7 +788,7 @@ const DEVICES = {
 /* =====================================================================
    2. GLOBALS
 ===================================================================== */
-let scene, camera, renderer, controls, raycaster, mouse = new THREE.Vector2(), hemiLight, sunLight;
+let scene, camera, renderer, controls, orbitControls, trackControls, raycaster, mouse = new THREE.Vector2(), hemiLight, sunLight;
 const floorGroups = {}; FLOOR_KEYS.forEach(k => floorGroups[k] = new THREE.Group());
 const siteGroup = new THREE.Group();      // lawn, paving, trees, boundary
 const extGroup = new THREE.Group();       // tall facade features (hidden in floor cutaway)
@@ -789,7 +798,8 @@ const planMeshes = []; let planMats = [], plainFloorMat;
 const devices = []; const pickables = []; const zones = {};
 const blinds = []; let blindsTarget = 0;
 const extLights = []; const extEmissive = [];
-let poolWaterMat, waterTex, slidingGate, gateTargetX = 6, waterLevelMesh;
+let poolWaterMat, waterTex, slidingGate, gateTargetX = 6, waterLevelMesh, fenceGroup = null, fenceOn = true;
+function toggleFence(on) { fenceOn = on; if (fenceGroup) fenceGroup.visible = on; }
 let evChargerLed, evChargerLight, isEvCharging = false;
 let evChargeMode = 'solar', evCurrentLimit = 16, evSessionKwh = 0, evPowerKw = 0, solarGenerationKw = 4.8;
 let evUiUpdateAt = 0;
@@ -896,6 +906,17 @@ function worldUV(geo, size) {
    4. MATERIALS
 ===================================================================== */
 const MAT = {};
+function applyBrickSkin(m) {
+    const L = new THREE.TextureLoader(), maxA = 8;
+    const load = (file, srgb, cb) => L.load('textures/brick/' + file, t => {
+        t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = maxA; t.repeat.set(2.4 / 2, 2.4 / 2);
+        if (srgb) t.encoding = THREE.sRGBEncoding;
+        cb(t); m.needsUpdate = true;
+    }, undefined, () => console.warn('brick texture failed:', file));
+    load('color.jpg', true, t => { m.map = t; });
+    load('normal.jpg', false, t => { m.normalMap = t; m.normalScale.set(1.3, 1.3); });
+    load('roughness.jpg', false, t => { m.roughnessMap = t; m.roughness = 1; });
+}
 // CGAxis "Beige Marble 7967" PBR set (2K). Swaps in when loaded; procedural travertine stays on load error.
 function applyMarbleSkin(mats) {
     const L = new THREE.TextureLoader(), maxA = 8;
@@ -932,6 +953,13 @@ function buildMaterials() {
     MAT.deck = new THREE.MeshStandardMaterial({ map: TEX.deck, roughness: 0.8 });
     MAT.coping = new THREE.MeshStandardMaterial({ color: 0xe7e2d8, roughness: 0.7 });
     applyMarbleSkin([MAT.trav, MAT.travDark, MAT.slab]);
+    // every wall: CGAxis "Grey Stone Brick Wall (4573)" PBR set (4K source cut to 1K, real size 2 m x 2 m). textures/brick/color.jpg is the grey diffuse recoloured stone by stone (stones segmented from the height map, earthy palette, original shading kept). The placeholder map makes box() /
+    // wallSeg() lay out UVs in metres straight away; repeat 2.4/2 because those helpers use a 2.4 m UV tile.
+    { const pc = document.createElement('canvas'); pc.width = pc.height = 4; pc.getContext('2d').fillStyle = '#9a9da1'; pc.getContext('2d').fillRect(0, 0, 4, 4);
+      MAT.grayWall = new THREE.MeshStandardMaterial({ color: 0x9a9da2, roughness: 0.92 });   // painted grey: every wall surface seen from inside a room
+      MAT.brickWall = new THREE.MeshStandardMaterial({ map: new THREE.CanvasTexture(pc), color: 0xffffff, roughness: 0.92 });
+      MAT.brickWall.color.setScalar(1.1);   // colour map is the CGAxis stone recoloured per stone (terracotta / sandstone / brick brown / warm grey / slate); slight lift so indoor walls keep their colour
+      applyBrickSkin(MAT.brickWall); }
     MAT.leaf = new THREE.MeshStandardMaterial({ color: 0x2f5d2a, roughness: 0.9, flatShading: true });
     MAT.leaf2 = new THREE.MeshStandardMaterial({ color: 0x4f7f32, roughness: 0.9, flatShading: true });
     MAT.trunk = new THREE.MeshStandardMaterial({ color: 0x5b4636, roughness: 0.95 });
@@ -999,9 +1027,20 @@ function planPlane(f, pts, y, parent, holes = []) {
 
 function wallSeg(parent, a, b, y0, h, mat, t = 0.25) {
     const dx = b.x - a.x, dz = b.z - a.z, len = Math.hypot(dx, dz);
-    const g = new THREE.BoxGeometry(len + t, h, t); if (mat.map) worldUV(g, 2.4);
+    const g = new THREE.BoxGeometry(len + t + 0.004, h, t); if (mat.map) worldUV(g, 2.4);   // +4 mm: end caps stay off the neighbour's coplanar face
     const m = new THREE.Mesh(g, mat); m.position.set((a.x + b.x) / 2, y0 + h / 2, (a.z + b.z) / 2);
     m.rotation.y = -Math.atan2(dz, dx); m.castShadow = mat !== MAT.glass; m.receiveShadow = true;
+    parent.add(m); return m;
+}
+
+// like wallSeg, but the face looking into the building (inward normal) gets the grey paint and every other face keeps the outer material
+function wallSegIn(parent, a, b, y0, h, outer, inner, inward, t = 0.25) {
+    const dx = b.x - a.x, dz = b.z - a.z, len = Math.hypot(dx, dz);
+    const g = new THREE.BoxGeometry(Math.max(len - t, 0.05), h, t); worldUV(g, 2.4);   // stops at the corner posts (see buildShell), so no two walls overlap
+    const nx = -dz / len, nz = dx / len, plusZ = (inward.x * nx + inward.z * nz) > 0;   // local +z of the box points along (nx, nz)
+    const mats = [outer, outer, outer, outer, plusZ ? inner : outer, plusZ ? outer : inner];
+    const m = new THREE.Mesh(g, mats); m.position.set((a.x + b.x) / 2, y0 + h / 2, (a.z + b.z) / 2);
+    m.rotation.y = -Math.atan2(dz, dx); m.castShadow = true; m.receiveShadow = true;
     parent.add(m); return m;
 }
 
@@ -1035,7 +1074,7 @@ function glazing(parent, a, b, y0, h, inward, withBlind) {
 }
 
 function buildShell(f) {
-    const WM = (f === 'F2') ? MAT.travDark : MAT.trav; // light lower floors, dark upper floor
+    const WM = MAT.brickWall; // all walls: grey stone brick
     const def = PLAN[f], pts = worldPoly(f, def.poly), grp = new THREE.Group(), tall = new THREE.Group();
     grp.add(tall); grp.userData.tall = tall;
     grp.position.y = LEVEL[f];
@@ -1047,16 +1086,28 @@ function buildShell(f) {
         const mid = { x: (a.x + b.x) / 2 + nx * 0.4, z: (a.z + b.z) / 2 + nz * 0.4 };
         const inward = pointInPoly(mid, pts) ? { x: nx, z: nz } : { x: -nx, z: -nz };
         switch (type) {
-            case 'w': case 'W2': wallSeg(tgt, a, b, 0, H, WM); break;
+            case 'w': case 'W2': wallSegIn(tgt, a, b, 0, H, WM, MAT.grayWall, inward); break;
             case 'p':
-                wallSeg(grp, a, b, 0, 0.9, WM); wallSeg(grp, a, b, 2.6, H - 2.6, WM);
-                if (len > 1.2) glazing(grp, a, b, 0.9, 1.7, inward, true); else wallSeg(grp, a, b, 0.9, 1.7, WM);
+                wallSegIn(grp, a, b, 0, 0.9, WM, MAT.grayWall, inward); wallSegIn(grp, a, b, 2.6, H - 2.6, WM, MAT.grayWall, inward);
+                if (len > 1.2) glazing(grp, a, b, 0.9, 1.7, inward, true); else wallSegIn(grp, a, b, 0.9, 1.7, WM, MAT.grayWall, inward);
                 break;
             case 'g': case 'G2':
-                wallSeg(tgt, a, b, H - 0.3, 0.3, WM); glazing(tgt, a, b, 0, H - 0.3, inward, true); break;
+                wallSegIn(tgt, a, b, H - 0.3, 0.3, WM, MAT.grayWall, inward); glazing(tgt, a, b, 0, H - 0.3, inward, true); break;
             case 'r':
                 wallSeg(grp, a, b, 0, 1.1, MAT.glass, 0.04); wallSeg(grp, a, b, 1.1, 0.05, MAT.frame, 0.08); break;
         }
+    });
+    // corner posts: one post per vertex covers the t x t square the shortened walls leave, brick outside / grey paint on the faces that look into the building
+    const tt = 0.25;
+    pts.forEach((v, i) => {
+        const pe = def.edges[(i + pts.length - 1) % pts.length], ne = def.edges[i];
+        if (pe === 'r' || ne === 'r') return;
+        const inw = e => { const a = pts[e], b = pts[(e + 1) % pts.length], dx = b.x - a.x, dz = b.z - a.z, len = Math.hypot(dx, dz), nx = -dz / len, nz = dx / len; const mid = { x: (a.x + b.x) / 2 + nx * 0.4, z: (a.z + b.z) / 2 + nz * 0.4 }; return pointInPoly(mid, pts) ? { x: nx, z: nz } : { x: -nx, z: -nz }; };
+        const n1 = inw((i + pts.length - 1) % pts.length), n2 = inw(i), sx = n1.x + n2.x, sz = n1.z + n2.z;
+        const tallV = ['W2', 'G2'].includes(pe) || ['W2', 'G2'].includes(ne), H = tallV ? (LEVEL.F2 - LEVEL.GF) : FLOOR_H;
+        const g = new THREE.BoxGeometry(tt, H, tt); worldUV(g, 2.4);
+        const O = WM, I = MAT.grayWall, mats = [sx > 0.01 ? I : O, sx < -0.01 ? I : O, O, O, sz > 0.01 ? I : O, sz < -0.01 ? I : O];
+        const m = new THREE.Mesh(g, mats); m.position.set(v.x, H / 2, v.z); m.castShadow = true; m.receiveShadow = true; (tallV ? tall : grp).add(m);
     });
     floorGroups[f].add(grp); shells[f] = grp;
     return pts;
@@ -1096,13 +1147,29 @@ function buildBuilding() {
     buildShell('F2');
     // terrace parapets around the first-floor roof
     const parapet = new THREE.Group(); parapet.position.y = LEVEL.F2;
-    f1Pts.forEach((a, i) => wallSeg(parapet, a, f1Pts[(i + 1) % f1Pts.length], 0, 0.5, MAT.travDark, 0.2));
+    // only where the first-floor roof is actually open to the sky: parts of the F1 outline that run under / beside the F2 footprint
+    // (e.g. through the second-floor lounge) get no parapet
+    const distToPoly = (pt, poly) => { let best = 1e9; for (let i = 0; i < poly.length; i++) { const p = poly[i], q = poly[(i + 1) % poly.length], vx = q.x - p.x, vz = q.z - p.z, L2 = vx * vx + vz * vz; let t = L2 ? ((pt.x - p.x) * vx + (pt.z - p.z) * vz) / L2 : 0; t = Math.max(0, Math.min(1, t)); best = Math.min(best, Math.hypot(pt.x - (p.x + vx * t), pt.z - (p.z + vz * t))); } return best; };
+    f1Pts.forEach((a, i) => {
+        const b = f1Pts[(i + 1) % f1Pts.length], len = Math.hypot(b.x - a.x, b.z - a.z), n = Math.max(2, Math.ceil(len / 0.05));
+        let t0 = null;
+        for (let k = 0; k <= n; k++) {
+            const t = k / n, pt = { x: a.x + (b.x - a.x) * t, z: a.z + (b.z - a.z) * t };
+            const open = !pointInPoly(pt, f2Pts) && distToPoly(pt, f2Pts) > 0.3;
+            if (open && t0 === null) t0 = t;
+            if ((!open || k === n) && t0 !== null) {
+                const t1 = open ? t : t - 1 / n;
+                if ((t1 - t0) * len > 0.2) wallSeg(parapet, { x: a.x + (b.x - a.x) * t0, z: a.z + (b.z - a.z) * t0 }, { x: a.x + (b.x - a.x) * t1, z: a.z + (b.z - a.z) * t1 }, 0, 0.5, MAT.brickWall, 0.2);
+                t0 = null;
+            }
+        }
+    });
     floorGroups.F2.add(parapet);
 
     // ---- Roof
     slab(f2Pts, LEVEL.ROOF + 0.4, 0.4, MAT.travDark, floorGroups.ROOF);
     const rp = new THREE.Group(); rp.position.y = LEVEL.ROOF + 0.4;
-    f2Pts.forEach((a, i) => wallSeg(rp, a, f2Pts[(i + 1) % f2Pts.length], 0, 0.55, MAT.travDark, 0.3));
+    f2Pts.forEach((a, i) => wallSeg(rp, a, f2Pts[(i + 1) % f2Pts.length], 0, 0.55, MAT.brickWall, 0.3));
     floorGroups.ROOF.add(rp);
 
     buildFrontFeatures(lA, lB);
@@ -1213,11 +1280,11 @@ function buildStaircases() {
     // south end, the lift wall beside the straight run, and the lift's north wall under the top run
     ['GF', 'F1', 'F2'].forEach(f => {
         const sh = shells[f], t = 0.2;
-        box(0.06, H, zS - zN, MAT.plaster, xOut + 0.03, H / 2, (zN + zS) / 2, sh); // thin lining: outer wall is just beyond on GF/1F
-        box(xOut + 0.06 - (xW - 0.05), H, t, MAT.plaster, (xOut + 0.06 + xW - 0.05) / 2, H / 2, zN - t / 2, sh);
-        box(xOut - (xIn - t), H, 0.06, MAT.plaster, (xOut + xIn - t) / 2, H / 2, zS + 0.03, sh);
-        box(t, H, zB - zC, MAT.plaster, xIn - t / 2, H / 2, (zB + zC) / 2, sh);
-        box(xIn - s.lift.x0, H, t, MAT.plaster, (xIn + s.lift.x0) / 2, H / 2, zC + t / 2, sh);
+        box(0.06, H, zS - zN, MAT.grayWall, xOut + 0.03, H / 2, (zN + zS) / 2, sh); // thin lining: outer wall is just beyond on GF/1F
+        box(xOut + 0.06 - (xW - 0.05), H, t, MAT.grayWall, (xOut + 0.06 + xW - 0.05) / 2, H / 2, zN - t / 2, sh);
+        box(xOut - (xIn - t), H, 0.06, MAT.grayWall, (xOut + xIn - t) / 2, H / 2, zS + 0.03, sh);
+        box(t, H, zB - zC, MAT.grayWall, xIn - t / 2, H / 2, (zB + zC) / 2, sh);
+        box(xIn - s.lift.x0, H, t, MAT.grayWall, (xIn + s.lift.x0) / 2, H / 2, zC + t / 2, sh);
     });
 
     // ---- landings into the rooms: the floor slab is the landing; guard the open stair edges.
@@ -1244,10 +1311,10 @@ function buildStaircases() {
     // GF walls round the basement stair void (hatched on the GF plan); the exit is the open south
     // side of the top winders, into the passage north of the dining area
     const gs = shells.GF, t = 0.15, xSq = b.xW + (b.zS - b.zN);
-    box(b.voidEast - b.xW + 2 * t, H, t, MAT.plaster, (b.xW + b.voidEast) / 2, H / 2, b.zN - t / 2, gs);
-    box(b.voidEast - xSq + t, H, t, MAT.plaster, (xSq + b.voidEast + t) / 2, H / 2, b.zS + t / 2, gs);
-    box(t, H, b.zS - b.zN, MAT.plaster, b.voidEast + t / 2, H / 2, (b.zN + b.zS) / 2, gs);
-    box(t, H, (b.zS - b.zN) * 0.6, MAT.plaster, b.xW - t / 2, H / 2, b.zN + (b.zS - b.zN) * 0.3, gs);
+    box(b.voidEast - b.xW + 2 * t, H, t, MAT.grayWall, (b.xW + b.voidEast) / 2, H / 2, b.zN - t / 2, gs);
+    box(b.voidEast - xSq + t, H, t, MAT.grayWall, (xSq + b.voidEast + t) / 2, H / 2, b.zS + t / 2, gs);
+    box(t, H, b.zS - b.zN, MAT.grayWall, b.voidEast + t / 2, H / 2, (b.zN + b.zS) / 2, gs);
+    box(t, H, (b.zS - b.zN) * 0.6, MAT.grayWall, b.xW - t / 2, H / 2, b.zN + (b.zS - b.zN) * 0.3, gs);
 }
 
 /* Basement - "Apresentacao Delisa Court" pp. 59-66 (plan sketch p.59, renders pp.60-66):
@@ -1286,14 +1353,82 @@ function woodPlankTexture(base) {
     const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; return t;
 }
 
+// CGAxis "Teak Wood Planks 33_84" PBR set (4K source downscaled to 2K, real size 1.5 m x 1.5 m). Swaps in for the procedural
+// plank canvas once loaded; the canvas stays on load error. Geometry UVs are in metres, so repeat = 1 / 1.5.
+function applyTeakSkin(m, repeat = 1 / 1.5) {
+    const L = new THREE.TextureLoader(), maxA = 8;
+    const load = (file, srgb, cb) => L.load('textures/teak/' + file, t => {
+        t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = maxA; t.repeat.set(repeat, repeat);
+        if (srgb) t.encoding = THREE.sRGBEncoding;
+        cb(t); m.needsUpdate = true;
+    }, undefined, () => console.warn('teak texture failed:', file));
+    load('color.jpg', true, t => { m.map = t; m.color.setHex(0xffffff); });
+    load('normal.jpg', false, t => { m.normalMap = t; });
+    load('roughness.jpg', false, t => { m.roughnessMap = t; m.roughness = 1; });
+}
+
+// samixalam "Bar Stool" GLB (CC BY 4.0, https://sketchfab.com/3d-models/bar-stool-dc5042a8fdcf400e9d0d3ffc17c3ca49), models/bar_stool.glb.
+// The 1.3 M triangle original was position-welded, merged and decimated offline (seat ~6k tris, plain white leather, 256 px
+// textures), 0.7 MB. Model front is +x, 1.02 m tall. Box stools are the fallback and are swapped once it loads.
+const BAR_STOOL = { root: null, jobs: [], failed: false, scale: 1.04 };
+function loadBarStool() {
+    new THREE.GLTFLoader().load('models/bar_stool.glb', g => {
+        g.scene.traverse(o => {
+            if (!o.isMesh) return;
+            o.castShadow = o.receiveShadow = true;
+            const m = o.material; m.normalMap = null;
+            if (m.name === 'Chrome') { m.map = null; m.metalnessMap = null; m.roughnessMap = null; m.color.setHex(0xc9ced6); m.metalness = 0.55; m.roughness = 0.28; } // no env map in the scene: keep chrome from rendering black
+            m.needsUpdate = true;
+        });
+        BAR_STOOL.root = g.scene; BAR_STOOL.jobs.splice(0).forEach(j => j());
+    }, undefined, e => { BAR_STOOL.failed = true; BAR_STOOL.jobs.length = 0; console.warn('bar stool model failed to load', e); });
+}
+// swap the box stool `parts` for the model at (x, y floor, z), facing -z (towards the bar counter)
+function barStoolSwap(parent, parts, x, y, z) {
+    const job = () => {
+        parts.forEach(p => p.parent && p.parent.remove(p));
+        const m = BAR_STOOL.root.clone(true); m.scale.setScalar(BAR_STOOL.scale); m.rotation.y = Math.PI / 2; m.position.set(x, y, z); parent.add(m);
+    };
+    if (BAR_STOOL.root) job(); else if (!BAR_STOOL.failed) BAR_STOOL.jobs.push(job);
+}
+
 // leather 2-seat recliner unit facing -x (screen); z0..z1 is its width
 function addReclinerUnit(parent, leather, x, z0, z1, y) {
-    const w = z1 - z0, zc = (z0 + z1) / 2;
+    const w = z1 - z0, zc = (z0 + z1) / 2, n0 = parent.children.length;
     box(0.95, 0.18, w, MAT.devDark, x + 0.05, y + 0.09, zc, parent);
     box(0.9, 0.26, w, leather, x, y + 0.31, zc, parent);
     box(0.28, 0.72, w, leather, x + 0.36, y + 0.78, zc, parent);
     [z0 + 0.1, zc, z1 - 0.1].forEach(z => box(0.86, 0.22, 0.2, leather, x + 0.02, y + 0.55, z, parent));
     [z0 + 0.2 + (w - 0.4) * 0.25, z0 + 0.2 + (w - 0.4) * 0.75].forEach(z => box(0.16, 0.34, 0.42, FMAT.linen || leather, x + 0.16, y + 0.62, z, parent));
+    reclinerSwap(parent, parent.children.slice(n0), x + 0.05, y, zc, w);
+}
+// Pipa "Cinema Theater Lounge Sofa" GLB (CC BY 4.0, https://sketchfab.com/3d-models/cinema-theater-lounge-sofa-2211e6246174439b8c87fd3e81b778e0),
+// models/cinema_sofa.glb: 2-seat recliner with centre console, faces +z. The box recliners above are the fallback and are
+// swapped for the model (leather recoloured orange) once it loads; if loading fails the boxes stay.
+const CINEMA_SOFA = { root: null, size: null, jobs: [], failed: false, leatherColor: 0xe8731a };
+function loadCinemaSofa() {
+    new THREE.GLTFLoader().load('models/cinema_sofa.glb', g => {
+        const root = g.scene, mats = new Set();
+        root.traverse(o => { if (o.isMesh) { o.castShadow = false; o.receiveShadow = true; (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => mats.add(m)); } });
+        mats.forEach(m => {
+            if (m.name !== 'Leather_05') return;
+            m.map = null; m.normalMap = null; m.color.setHex(CINEMA_SOFA.leatherColor); m.roughness = 0.55; m.metalness = 0; m.needsUpdate = true; // orange leather
+        });
+        root.updateMatrixWorld(true);
+        const b = new THREE.Box3().setFromObject(root);
+        CINEMA_SOFA.root = root; CINEMA_SOFA.size = b.getSize(new THREE.Vector3()); CINEMA_SOFA.base = new THREE.Vector3((b.min.x + b.max.x) / 2, b.min.y, (b.min.z + b.max.z) / 2);
+        CINEMA_SOFA.jobs.splice(0).forEach(j => j());
+    }, undefined, e => { CINEMA_SOFA.failed = true; CINEMA_SOFA.jobs.length = 0; console.warn('cinema sofa model failed to load', e); });
+}
+// swap the box recliner `parts` for the model: centre (x, zc), floor y, facing -x (screen), fitted to width w
+function reclinerSwap(parent, parts, x, y, zc, w) {
+    const job = () => {
+        parts.forEach(p => p.parent && p.parent.remove(p));
+        const k = w / CINEMA_SOFA.size.x, holder = new THREE.Group(), m = CINEMA_SOFA.root.clone(true);
+        m.position.set(-CINEMA_SOFA.base.x, -CINEMA_SOFA.base.y, -CINEMA_SOFA.base.z); holder.add(m);
+        holder.scale.setScalar(k); holder.rotation.y = -Math.PI / 2; holder.position.set(x, y, zc); parent.add(holder);
+    };
+    if (CINEMA_SOFA.root) job(); else if (!CINEMA_SOFA.failed) CINEMA_SOFA.jobs.push(job);
 }
 // CGAxis "Beige Modern Sofa" GLB (models/sofa.glb). Box sofas are built first as a fallback and
 // swapped for the model once it loads; if loading fails the box sofas simply stay.
@@ -1362,6 +1497,7 @@ function buildBasementCinema() {
     const floorShape = new THREE.Shape([new THREE.Vector2(x0, -z0), new THREE.Vector2(x1, -z0), new THREE.Vector2(x1, -z1), new THREE.Vector2(x0, -z1)]);
     const floor = new THREE.Mesh(new THREE.ShapeGeometry(floorShape), mat(0xffffff, { map: woodFloorT, roughness: 0.6 }));
     floor.rotation.x = -Math.PI / 2; floor.position.y = f + 0.016; floor.receiveShadow = true; group.add(floor);
+    applyTeakSkin(floor.material);
     const cs = new THREE.Shape([new THREE.Vector2(x0, z0), new THREE.Vector2(x1, z0), new THREE.Vector2(x1, z1), new THREE.Vector2(x0, z1)]);
     cs.holes.push(new THREE.Path([new THREE.Vector2(S.xW - 0.05, S.zN - 0.1), new THREE.Vector2(S.xW - 0.05, S.zS), new THREE.Vector2(S.voidEast, S.zS), new THREE.Vector2(S.voidEast, S.zN - 0.1)]));
     const ceilGeo = new THREE.ShapeGeometry(cs);
@@ -1435,6 +1571,7 @@ function buildBasementCinema() {
     [-0.55, 0.1, 0.75].forEach(x => {
         const seat = new THREE.Mesh(new THREE.CylinderGeometry(0.21, 0.19, 0.07, 16), leather); seat.position.set(x, f + 0.76, cz1 + 0.42); group.add(seat);
         const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.74, 6), MAT.devDark); leg.position.set(x, f + 0.37, cz1 + 0.42); group.add(leg);
+        barStoolSwap(group, [seat, leg], x, f, cz1 + 0.42);
     });
     cin.barLight = new THREE.PointLight(0xffc77a, 0, 5, 1.6); cin.barLight.position.set(0.1, f + 2.2, -1.3); group.add(cin.barLight);
 
@@ -1549,16 +1686,74 @@ function buildFrontFeatures(lA, lB) {
     extGroup.add(sideUp, sideUp.target); extLights.push({ light: sideUp, base: 1.4 });
 }
 
+// Roof equipment models (CC BY 4.0): Maggadog "Plastic Water Tank 500 Lts" (https://sketchfab.com/3d-models/plastic-water-tank-500-lts-52c926f621ff4d61a2fb66a9160b3c91)
+// -> models/water_tank.glb, and adventurer "Solar Panel low poly" (https://sketchfab.com/3d-models/solar-panel-low-poly-be81ba18edb04e03a68954d1ae680a6d)
+// -> models/solar_panel.glb. The old cylinder tanks / box panels are the fallback until the models load.
+const ROOFM = { tank: { root: null, jobs: [], failed: false, url: 'models/water_tank.glb' }, pv: { root: null, jobs: [], failed: false, url: 'models/solar_panel.glb' } };
+function loadRoofModels() {
+    Object.entries(ROOFM).forEach(([name, M]) => new THREE.GLTFLoader().load(M.url, g => {
+        g.scene.traverse(o => {
+            if (!o.isMesh) return;
+            o.castShadow = true; o.receiveShadow = true;
+            const m = o.material; m.normalMap = null;
+            if (name === 'pv') { m.metalness = 0.3; m.roughness = 0.12; m.envMap = carEnv(); m.envMapIntensity = 1.1; }   // glassy PV face reflecting the sky
+            else { m.metalness = 0.05; m.roughness = 0.5; m.color.setScalar(2.2); }                                        // plastic: the source metal values render black without an environment map
+            m.needsUpdate = true;
+        });
+        g.scene.updateMatrixWorld(true);
+        const b = new THREE.Box3().setFromObject(g.scene); M.root = g.scene; M.size = b.getSize(new THREE.Vector3()); M.base = new THREE.Vector3((b.min.x + b.max.x) / 2, b.min.y, (b.min.z + b.max.z) / 2); M.center = b.getCenter(new THREE.Vector3());
+        M.jobs.splice(0).forEach(j => j());
+    }, undefined, e => { M.failed = true; M.jobs.length = 0; console.warn(name + ' model failed to load', e); }));
+}
+function roofModel(M, job) { if (M.root) job(); else if (!M.failed) M.jobs.push(job); }
+
 function buildRoofKit() {
     const g = floorGroups.ROOF, top = LEVEL.ROOF + 0.4;
+    // ---- PV array: 3 rows x 5 panels, tilted 12 deg to the south (+z), contiguous along each row, on rails and posts, centred in the roof rectangle
     const a = W('F2', 640, 330), b = W('F2', 1000, 560);
+    const PW = 1.6, GAP = 0.04, ROWS = 3, COLS = 5, PITCH = 1.5, TILT = 12 * Math.PI / 180;
+    const rowW = COLS * PW + (COLS - 1) * GAP, x0 = (a.x + b.x) / 2 - rowW / 2, zFirst = a.z + 0.9;
+    const fallback = [];
     for (let i = 0; i < 5; i++) for (let j = 0; j < 3; j++) {
-        const pv = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.06, 1.05), MAT.solar);
-        pv.position.set(a.x + 0.9 + i * 1.85, top + 0.35, a.z + 0.7 + j * 1.6); pv.rotation.x = -0.18; pv.castShadow = true; g.add(pv);
+        const pv = new THREE.Mesh(new THREE.BoxGeometry(PW, 0.04, PW * 0.48), MAT.solar);
+        pv.position.set(x0 + PW / 2 + i * (PW + GAP), top + 0.3, zFirst + j * PITCH); pv.rotation.x = TILT; pv.castShadow = true; g.add(pv); fallback.push(pv);
     }
+    const frameMat = new THREE.MeshStandardMaterial({ color: 0x9aa3ad, metalness: 0.75, roughness: 0.4 });
+    roofModel(ROOFM.pv, () => {
+        fallback.forEach(p => p.parent && p.parent.remove(p));
+        const M = ROOFM.pv, k = PW / M.size.x, ph = M.size.z * k, halfD = ph / 2, cT = Math.cos(TILT), sT = Math.sin(TILT);   // model: long side along x, depth along z (after its root rotation), thickness along y
+        for (let j = 0; j < ROWS; j++) {
+            const zc = zFirst + j * PITCH, yc = top + 0.3;
+            for (let i = 0; i < COLS; i++) {
+                const holder = new THREE.Group(), m = M.root.clone(true);
+                m.position.set(-M.center.x, -M.center.y, -M.center.z); holder.add(m); holder.scale.setScalar(k);
+                holder.rotation.x = TILT; holder.position.set(x0 + PW / 2 + i * (PW + GAP), yc, zc); g.add(holder);
+            }
+            // support: rails under the low (south) and high (north) edges, posts between every second panel
+            [[+1, yc - halfD * sT - 0.06], [-1, yc + halfD * sT - 0.06]].forEach(([sgn, ry]) => {
+                const rail = new THREE.Mesh(new THREE.BoxGeometry(rowW + 0.1, 0.045, 0.05), frameMat); rail.position.set(x0 + rowW / 2, ry, zc + sgn * halfD * cT); g.add(rail);
+                [x0 + 0.15, x0 + 2 * (PW + GAP) - GAP / 2, x0 + 4 * (PW + GAP) - GAP / 2, x0 + rowW - 0.15].forEach(px => {
+                    const h = ry - top, post = new THREE.Mesh(new THREE.BoxGeometry(0.045, h, 0.045), frameMat); post.position.set(px, top + h / 2, zc + sgn * halfD * cT); g.add(post);
+                });
+            });
+        }
+    });
+    // ---- two 500 L polytanks behind the array; the left one carries a sight gauge for the water level (see tankTarget)
     [W('F2', 700, 270), W('F2', 770, 270)].forEach((p, i) => {
         const tank = new THREE.Mesh(new THREE.CylinderGeometry(0.75, 0.75, 1.6, 20), MAT.tank);
         tank.position.set(p.x, top + 0.8, p.z + 0.4); tank.castShadow = true; g.add(tank);
+        roofModel(ROOFM.tank, () => {
+            tank.parent && tank.parent.remove(tank);
+            const M = ROOFM.tank, H = 1.35, k = H / M.size.y, holder = new THREE.Group(), m = M.root.clone(true);
+            m.position.set(-M.base.x, -M.base.y, -M.base.z); holder.add(m); holder.scale.setScalar(k); holder.rotation.y = i * 0.9; holder.position.set(p.x, top, p.z + 0.4); g.add(holder);
+            if (i === 0) {   // sight gauge: dark backing strip + blue water column (scaled by tankTarget in animate)
+                const R = M.size.x * k / 2, gx = p.x, gz = p.z + 0.4 + R + 0.01;
+                const back = new THREE.Mesh(new THREE.BoxGeometry(0.09, 1.0, 0.02), new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.4 })); back.position.set(gx, top + 0.15 + 0.5, gz); g.add(back);
+                if (waterLevelMesh && waterLevelMesh.parent) waterLevelMesh.parent.remove(waterLevelMesh);
+                waterLevelMesh = new THREE.Mesh(new THREE.BoxGeometry(0.05, 1.0, 0.02), new THREE.MeshBasicMaterial({ color: 0x38bdf8 }));
+                waterLevelMesh.geometry.translate(0, 0.5, 0); waterLevelMesh.position.set(gx, top + 0.15, gz + 0.012); waterLevelMesh.scale.y = tankTarget; g.add(waterLevelMesh);
+            }
+        });
         if (i === 0) {
             waterLevelMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.77, 0.77, 1.6, 20), new THREE.MeshBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.55 }));
             waterLevelMesh.geometry.translate(0, 0.8, 0); waterLevelMesh.position.set(p.x, top, p.z + 0.4); waterLevelMesh.scale.y = 0.85; g.add(waterLevelMesh);
@@ -1572,60 +1767,26 @@ const INTERIOR = {
     GF: {
         walls: [[930,13,84,5],[1014,17,7,156],[938,18,51,4],[992,18,22,4],[989,20,3,25],[930,21,8,24],[1010,22,4,29],[869,26,9,177],[645,43,161,8],[555,49,11,154],[414,50,8,58],[547,50,8,153],[806,50,6,77],[801,51,5,34],[175,53,24,11],[135,55,40,9],[128,63,7,74],[212,63,7,74],[801,89,3,32],[422,107,36,9],[458,115,7,32],[454,116,4,31],[725,126,79,9],[717,134,8,17],[805,134,7,70],[136,136,75,9],[212,144,7,77],[128,152,8,52],[454,167,11,42],[992,172,20,6],[987,177,5,27],[1013,177,8,26],[717,196,9,73],[566,199,95,11],[812,199,57,14],[921,199,40,14],[465,200,77,10],[661,202,56,8],[726,202,34,8],[878,202,43,11],[968,202,19,8],[993,202,19,8],[168,208,8,20],[176,209,10,19],[457,210,8,38],[136,220,32,8],[186,220,25,8],[523,268,194,8],[726,268,34,8],[523,276,89,3],[978,282,10,29],[266,301,192,9],[410,312,11,73],[457,362,8,34],[717,362,5,325],[722,362,4,56],[709,363,8,209],[421,383,36,11],[862,414,89,12],[816,415,46,11],[778,417,38,9],[951,417,60,9],[722,424,4,263],[813,431,10,21],[949,477,11,230],[820,500,129,9],[454,578,11,62],[371,629,83,11],[467,632,34,8],[717,691,9,32],[910,704,38,10],[952,707,8,49],[726,711,184,9],[927,714,21,6],[371,717,16,23],[387,719,17,11],[854,720,20,7],[717,745,9,157],[457,749,8,158],[509,824,23,9],[710,825,7,37],[638,896,79,11]],
         furniture: [
-            ["bed",343,115,432,208,"E"],
-            ["headCab",432,122,456,200],
-            ["bench",140,198,208,222,"S"],
             ["toilet",178,92,208,112,"E"],
             ["vanity",515,58,548,92,"N"],
             ["toilet",515,118,548,136,"E"],
             ["shower",465,157,542,197,"N"],
-            ["counter",562,50,595,200],
-            ["counter",595,50,670,80],
-            ["counter",595,172,660,200],
             ["washer",775,55,800,85],
             ["washer",775,87,800,120],
             ["vanity",812,96,840,118,"N"],
             ["toilet",818,128,850,146,"E"],
-            ["shower",810,155,870,197,"N"],
-            ["bed",922,122,968,200,"S"],
-            ["counter",807,210,952,240],
-            ["island",837,287,950,335],
-            ["counter",860,387,952,417],
-            ["fridge",817,375,862,410],
-            ["sinkCounter",955,245,985,410],
-            ["table",557,392,620,575],
-            ["chair",525,422,555,452,"W"],
-            ["chair",525,467,555,497,"W"],
-            ["chair",525,517,555,547,"W"],
-            ["chair",625,422,655,452,"E"],
-            ["chair",625,467,655,497,"E"],
-            ["chair",625,517,655,547,"E"],
-            ["chair",573,362,603,390,"N"],
-            ["chair",573,577,603,605,"S"],
-            ["rug",515,697,680,825],
-            ["sofa",545,648,640,690,"N"],
-            ["sofa",480,708,508,810,"W"],
-            ["coffee",557,712,632,785]
+            ["shower",810,155,870,197,"N"]
         ]
     },
     F1: {
         walls: [[550,17,52,13],[869,17,128,16],[1006,17,36,13],[1088,17,111,13],[1206,17,182,13],[860,27,9,43],[997,29,9,138],[1199,29,7,231],[1388,29,11,287],[581,30,12,40],[1211,30,120,3],[1334,30,7,43],[1196,32,3,228],[1208,32,3,95],[1331,32,3,41],[869,33,7,37],[991,33,6,134],[1192,35,4,64],[535,55,16,26],[18,65,9,80],[42,65,54,20],[100,65,285,20],[385,65,48,16],[443,65,92,16],[27,69,15,523],[96,69,4,16],[593,69,56,12],[809,69,51,12],[433,80,10,84],[581,80,11,246],[609,107,24,23],[633,114,24,16],[578,138,3,95],[952,162,39,16],[568,178,10,16],[18,197,9,190],[432,221,13,106],[1153,253,43,16],[940,257,57,12],[1004,257,149,16],[1197,267,11,49],[929,268,11,351],[1281,268,13,60],[945,269,31,4],[1153,269,24,4],[1152,278,24,22],[1145,281,7,19],[1208,315,73,12],[1294,315,93,12],[471,321,87,16],[445,325,16,12],[558,325,23,12],[1388,326,11,34],[461,336,10,44],[582,336,11,54],[1328,359,59,12],[1317,370,11,40],[704,417,225,16],[693,428,11,41],[704,433,5,36],[925,433,4,186],[18,439,9,167],[460,449,12,158],[591,468,102,13],[1317,565,12,40],[56,568,367,15],[1047,586,12,34],[418,593,42,14],[472,593,81,14],[553,594,29,13],[1059,600,4,20],[1292,600,13,520],[1329,604,59,13],[582,606,12,52],[1311,616,16,33],[1388,616,11,33],[941,618,18,12],[1028,618,19,12],[925,628,15,35],[1047,644,245,16],[1305,644,6,16],[1327,648,50,15],[581,701,13,279],[594,702,8,43],[927,741,13,94],[917,759,10,77],[394,979,187,13],[1287,981,5,83],[1227,1091,56,24],[1283,1094,6,21],[927,1102,300,13]],
         furniture: [
-            ["bed",60,210,215,355,"W"],
-            ["night",50,175,78,205],
-            ["night",50,385,78,418],
             ["wardrobe",40,80,385,128],
             ["toilet",525,95,580,120,"E"],
             ["vanity",535,140,580,230,"E"],
             ["shower",445,255,560,322,"N"],
-            ["bed",612,130,772,275,"W"],
-            ["night",605,90,632,120],
-            ["night",605,280,632,330],
             ["wardrobe",870,30,995,80],
             ["wardrobe",950,80,995,167],
-            ["shower",1010,35,1195,100,"S"],
-            ["toilet",1140,120,1200,150,"E"],
-            ["vanity",1155,160,1197,252,"E"],
             ["shower",1212,35,1330,125,"S"],
             ["toilet",1330,185,1385,215,"E"],
             ["vanity",1290,270,1385,315,"S"],
@@ -1655,14 +1816,8 @@ const INTERIOR = {
             ["roundTable",80,480,110,510],
             ["toilet",115,45,155,68,"E"],
             ["shower",92,100,155,195,"W"],
-            ["wardrobe",415,25,610,60],
-            ["wardrobe",320,235,605,270],
             ["wardrobe",635,280,665,480],
             ["wardrobe",410,445,625,480],
-            ["desk",440,340,527,378],
-            ["officeChair",470,305,500,335],
-            ["chair",448,388,475,415,"S"],
-            ["chair",497,388,524,415,"S"],
             ["sofa",200,610,310,660,"N"],
             ["sofa",140,680,195,795,"W"],
             ["roundTable",150,612,190,652],
@@ -1715,6 +1870,83 @@ function loadMasterBedroom() {
         }
     }, undefined, e => console.warn('master bedroom model failed to load', e));
 }
+
+// Ground-floor living room set: Sketchfab "living room interior FREE" (dasy444, free standard licence), models/living_room.glb.
+// The GLB is a whole concrete-loft diorama; only the furniture is kept (shell meshes dropped, wall panels / ceiling pipes
+// / stray lamps removed per triangle), then rotated, scaled and centred into the lounge rectangle on the ground floor.
+// room: free floor inside the lounge walls/glass (world m); sofaW: sofa widths (m) for the south / north / west sofas
+const LIVING = { plan: [715, 712], metersPerUnit: 0.165, lift: 0.012, rot: Math.PI, room: { x0: -2.95, x1: 2.9, z0: 5.5, z1: 9.82 }, sofaW: { S: 2.2, A: 2.0, B: 1.7 } };
+function loadLivingRoom() {
+    new THREE.GLTFLoader().load('models/living_room.glb', g => {
+        const root = g.scene; root.updateMatrixWorld(true);
+        const DROP = [0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 18]; // walls, floor, ceiling, pipes, pendants, window picture
+        let id = 0, sofa = null, sofaBox = null, rug = null; const v = new THREE.Vector3(), c = new THREE.Vector3(), kept = new THREE.Box3(); // kept: bounds of the furniture actually shown
+        root.traverse(o => {
+            if (!o.isMesh) return;
+            const n = id++;
+            if (DROP.includes(n)) { o.visible = false; return; }
+            o.castShadow = o.receiveShadow = true;
+            (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => { m.normalMap = null; });
+            if (n !== 14 && n !== 15 && n !== 16 && n !== 17) { kept.expandByObject(o); if (n === 1) rug = o; return; }
+            if (n === 14 || n === 16) kept.expandByObject(o);
+            const P = o.geometry.attributes.position, I = o.geometry.index.array, keep = [], sofaIdx = [];
+            for (let t = 0; t < I.length; t += 3) {
+                c.set(0, 0, 0);
+                for (let k = 0; k < 3; k++) { v.fromBufferAttribute(P, I[t + k]).applyMatrix4(o.matrixWorld); c.add(v); }
+                c.multiplyScalar(1 / 3);
+                const ok = n === 14 || n === 16 ? true : n === 15 ? (c.z < 12.3 && c.x > -12.5) : (c.z < 14.5 && c.y < 10 && c.x > -13); // 15: wall panels; 17: stray lamps
+                if (ok && n !== 14 && n !== 16) kept.expandByPoint(c);
+                // removed pieces (model coords): coffee table + its items (14), orange sideboard (14), glass wall cabinet (15), brass lamp (17)
+                const gone = (n === 14 && ((c.x > -2.1 && c.x < 4.2 && c.z > -8 && c.z < -1.8) || (c.x > 12.5 && c.z < -15.5))) ||
+                    (n === 15 && c.z > 4.5 && c.x < -11.5) || (n === 17 && c.x > 4.5 && c.z > 9.5) ||
+                    (n === 16 && c.x > 9.5 && c.z > -8 && c.z < 2); // 16: dark bench on the west side
+                if (!ok || gone) continue;
+                if (n === 14 && c.x > -6.6 && c.z < -9.35 && !(c.x < -6.2 && c.z > -10.05 && c.y < 3.3)) sofaIdx.push(I[t], I[t + 1], I[t + 2]); // the grey sofa, re-placed below
+                else keep.push(I[t], I[t + 1], I[t + 2]);
+            }
+            o.geometry.setIndex(keep);
+            if (n === 14) { // split the sofa into its own mesh so it can be resized and cloned
+                const sg = new THREE.BufferGeometry();
+                for (const k in o.geometry.attributes) sg.setAttribute(k, o.geometry.attributes[k]);
+                // the source mesh has triangles wound against their vertex normals, which shade dark/patchy on a double-sided
+                // material: flip any triangle whose face normal disagrees with its vertex normals
+                const N = o.geometry.attributes.normal, a = new THREE.Vector3(), b = new THREE.Vector3(), d = new THREE.Vector3(), nv = new THREE.Vector3();
+                for (let t = 0; t < sofaIdx.length; t += 3) {
+                    const i0 = sofaIdx[t], i1 = sofaIdx[t + 1], i2 = sofaIdx[t + 2];
+                    a.fromBufferAttribute(P, i0); b.fromBufferAttribute(P, i1).sub(a); d.fromBufferAttribute(P, i2).sub(a); b.cross(d);
+                    nv.set(0, 0, 0); [i0, i1, i2].forEach(i => { nv.x += N.getX(i); nv.y += N.getY(i); nv.z += N.getZ(i); });
+                    if (b.dot(nv) < 0) { sofaIdx[t + 1] = i2; sofaIdx[t + 2] = i1; }
+                }
+                sg.setIndex(sofaIdx);
+                sofa = new THREE.Mesh(sg, o.material); sofa.matrixAutoUpdate = false; sofa.matrix.copy(o.matrixWorld);
+                sofa.castShadow = sofa.receiveShadow = true;
+                sofaBox = new THREE.Box3(); sofaIdx.forEach(i => sofaBox.expandByPoint(v.fromBufferAttribute(P, i).applyMatrix4(o.matrixWorld))); // vertices of the sofa only
+            }
+        });
+        const holder = new THREE.Group(); holder.add(root);
+        holder.rotation.y = LIVING.rot; holder.scale.setScalar(LIVING.metersPerUnit); holder.updateMatrixWorld(true);
+        // centre the kept furniture on the target spot and sit it on the floor
+        const box = kept.clone().applyMatrix4(holder.matrixWorld);
+        const ctr = box.getCenter(new THREE.Vector3()), t = W('GF', LIVING.plan[0], LIVING.plan[1]);
+        holder.position.set(t.x - ctr.x, LEVEL.GF + LIVING.lift - box.min.y, t.z - ctr.z);
+        // move the whole set so the rug sits at the middle of the free floor, then arrange three sofas round it as on the GF plan
+        const R = LIVING.room; holder.updateMatrixWorld(true); const rc = new THREE.Box3().setFromObject(rug).getCenter(new THREE.Vector3());
+        holder.position.x += (R.x0 + R.x1) / 2 - rc.x; holder.position.z += (R.z0 + R.z1) / 2 - rc.z;
+        floorGroups.GF.add(holder);
+        const unit = sofaBox.getSize(new THREE.Vector3()), sc = sofaBox.getCenter(new THREE.Vector3());
+        const putSofa = (width, x, z, rotY) => { // sofa model faces +z locally; (x, z) is the sofa centre
+            const grp = new THREE.Group(), inner = new THREE.Group(), m = sofa.clone();
+            inner.add(m); inner.position.set(-sc.x, -sofaBox.min.y, -sc.z); grp.add(inner);
+            grp.scale.setScalar(width / unit.x); grp.rotation.y = rotY; grp.position.set(x, LEVEL.GF + LIVING.lift, z);
+            floorGroups.GF.add(grp); return unit.z * width / unit.x;
+        };
+        const cx = (R.x0 + R.x1) / 2, cz = (R.z0 + R.z1) / 2;
+        const dS = unit.z * LIVING.sofaW.S / unit.x, dA = unit.z * LIVING.sofaW.A / unit.x, dB = unit.z * LIVING.sofaW.B / unit.x;
+        putSofa(LIVING.sofaW.S, cx, R.z1 - dS / 2, Math.PI);          // south, back to the glass, facing north
+        putSofa(LIVING.sofaW.A, cx + 0.2, R.z0 + dA / 2, 0);          // north (plan sofa), facing south
+        putSofa(LIVING.sofaW.B, R.x0 + dB / 2, cz, Math.PI / 2);      // west (plan sofa), back to the west wall, facing east
+    }, undefined, e => console.warn('living room model failed to load', e));
+}
 // plan-image px -> world. Each PLAN_TEXTURES image is the plan crop at 0.75 plan px per image px.
 const PLAN_IMG = { GF: [300, 130], F1: [120, 95], F2: [520, 215] };
 function IP(f, ix, iy) { const o = PLAN_IMG[f]; return W(f, o[0] + ix * 0.75, o[1] + iy * 0.75); }
@@ -1723,7 +1955,7 @@ const FMAT = {};
 function buildFurnitureMaterials() {
     const m = (color, o = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.8, ...o });
     Object.assign(FMAT, {
-        wall: m(0xf4f1ea, { roughness: 0.92 }), wood: m(0x6b4f3a, { roughness: 0.7 }), woodLight: m(0xb08d68, { roughness: 0.7 }),
+        wall: MAT.grayWall, wood: m(0x6b4f3a, { roughness: 0.7 }), woodLight: m(0xb08d68, { roughness: 0.7 }),
         fabric: m(0xd8d2c6, { roughness: 0.95 }), fabricDark: m(0x4b5563, { roughness: 0.95 }), linen: m(0xf3f2ee, { roughness: 0.95 }),
         duvet: m(0x9aa5b1, { roughness: 0.95 }), ceramic: m(0xf8fafc, { roughness: 0.25 }), steel: m(0xb8bec6, { roughness: 0.35, metalness: 0.6 }),
         dark: m(0x22262d, { roughness: 0.6 }), rug: m(0x8b7d6b, { roughness: 1 }), mirror: m(0xdbeafe, { roughness: 0.05, metalness: 0.9 }),
@@ -1799,6 +2031,7 @@ function addFurniture(f, low, tall, [type, ix0, iy0, ix1, iy1, dir = 'N']) {
 }
 
 function buildInterior() {
+    const F2_POLY = worldPoly('F2', PLAN.F2.poly);
     buildFurnitureMaterials();
     const s = MAIN_STAIR, b = BASEMENT_STAIR;
     const inStair = (f, x, z) => (x > s.xW - 0.35 && x < s.xOut + 0.35 && z > s.zN - 0.35 && z < s.zS + 0.35) ||
@@ -1816,6 +2049,11 @@ function buildInterior() {
             const a = IP(f, ix, iy), c = IP(f, ix + iw, iy + ih);
             const sx = c.x - a.x, sz = c.z - a.z, cx = (a.x + c.x) / 2, cz = (a.z + c.z) / 2;
             if (inStair(f, cx, cz) || onShell(cx, cz, sx > sz)) return;
+            if (f === 'GF' && cx > -3.0 && cx < 2.95 && cz > 5.45 && cz < 10.0) return; // partitions that cut through the living room are removed
+            if (f === 'F2') { // second-floor clean-up: stubs drawn outside the building line (window-frame marks on the glazed west / south edges) are dropped, hairline partitions get a real thickness
+                if (!pointInPoly({ x: cx, z: cz }, F2_POLY)) return;
+                const th = 0.1; if (Math.abs(sx) < 0.08 && Math.abs(sz) > 0.3) { box(th, H, sz, FMAT.wall, cx, H / 2, cz, shell); return; } if (Math.abs(sz) < 0.08 && Math.abs(sx) > 0.3) { box(sx, H, th, FMAT.wall, cx, H / 2, cz, shell); return; }
+            }
             box(sx, H, sz, FMAT.wall, cx, H / 2, cz, shell);
         });
         const low = new THREE.Group(); low.position.y = LEVEL[f];
@@ -1935,7 +2173,7 @@ function toggleWalk(on = !walk.active) {
     } else {
         walk.tour = null; walk.keys = {};
         if (document.pointerLockElement) document.exitPointerLock();
-        camera.fov = 42; camera.near = 0.2; camera.updateProjectionMatrix(); camera.rotation.order = 'XYZ';
+        camera.fov = 42; camera.near = 0.2; camera.updateProjectionMatrix(); camera.rotation.order = 'XYZ'; camera.up.set(0, 1, 0);
         controls.enabled = true;
         const f = walk.floor; currentFloor = '';
         setFloorFilter(f);
@@ -2055,14 +2293,31 @@ function addShrub(x, z, r, y = 0) {
     const s = new THREE.Mesh(new THREE.IcosahedronGeometry(r, 1), Math.random() < 0.5 ? MAT.leaf : MAT.leaf2);
     s.position.set(x, y + r * 0.7, z); s.scale.y = 0.8; s.castShadow = true; siteGroup.add(s);
 }
+// CGAxis "Silver Maple 3D Model 6.5m" (10935), models/silver_maple.glb: converted from the 156 MB OBJ offline (branches welded +
+// decimated, leaf cards thinned to ~8% and enlarged, 512 px trunk map; ~41k triangles, 3 MB). Origin = trunk base, 6.55 m tall.
+// The low-poly trees below are the fallback and are swapped for the model once it loads.
+const TREE = { root: null, jobs: [], failed: false };
+function loadTreeModel() {
+    new THREE.GLTFLoader().load('models/silver_maple.glb', g => {
+        g.scene.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = false; if (o.material.map) o.material.map.anisotropy = 4;
+            if (o.material.name.startsWith('Leaves')) { o.material.color.setScalar(1.35); o.material.emissive.setScalar(0.45); o.material.emissiveMap = o.material.map; o.material.needsUpdate = true; } } }); // leaf textures are dark: lift them so the shaded side isn't black
+        TREE.root = g.scene; TREE.jobs.splice(0).forEach(j => j());
+    }, undefined, e => { TREE.failed = true; TREE.jobs.length = 0; console.warn('tree model failed to load', e); });
+}
 function addTree(x, z, s) {
+    const parts = [];
     const tr = new THREE.Mesh(new THREE.CylinderGeometry(0.22 * s, 0.4 * s, 4.5 * s, 8), MAT.trunk);
-    tr.position.set(x, 2.25 * s, z); tr.castShadow = true; siteGroup.add(tr);
+    tr.position.set(x, 2.25 * s, z); tr.castShadow = true; siteGroup.add(tr); parts.push(tr);
     for (let i = 0; i < 8; i++) {
         const c = new THREE.Mesh(new THREE.IcosahedronGeometry((1.4 + Math.random()) * s, 1), i % 2 ? MAT.leaf : MAT.leaf2);
         c.position.set(x + (Math.random() - 0.5) * 3 * s, (4.6 + Math.random() * 2.2) * s, z + (Math.random() - 0.5) * 3 * s);
-        c.castShadow = true; siteGroup.add(c);
+        c.castShadow = true; siteGroup.add(c); parts.push(c);
     }
+    const job = () => {
+        parts.forEach(p => p.parent && p.parent.remove(p));
+        const m = TREE.root.clone(true); m.scale.setScalar(s * 0.95); m.rotation.y = Math.random() * Math.PI * 2; m.position.set(x, 0, z); siteGroup.add(m);
+    };
+    if (TREE.root) job(); else if (!TREE.failed) TREE.jobs.push(job);
 }
 function addPalm(x, z, h) {
     const tr = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.24, h, 8), MAT.trunk);
@@ -2101,6 +2356,229 @@ function carEnv() {
 /* Luxury long-wheelbase saloon (generic - no badges or mascot): long bonnet, upright chrome grille,
    two-tone clearcoat paint with a chrome coachline, cream leather cabin, 21" multi-spoke chrome wheels.
    Built along +x (nose) and turned by `rot`. */
+// Car models (GLB, decimated + merged per material offline). The luxury box car is the fallback and is swapped for the model
+// once it loads; on load error the box car stays. `flip` turns a model whose nose points the other way.
+//  bmw:   KOElkast1007 "BMW X7 M60i" (Sketchfab Standard licence, https://sketchfab.com/3d-models/bmw-x7-m60i-5664218111d345c6b79c64ae48c6dd8b), ~154k tris, 7 MB
+//  tesla: Ameer Studio "Tesla 2018 Model 3" (CC BY 4.0, https://sketchfab.com/3d-models/tesla-2018-model-3-5ef9b845aaf44203b6d04e2c677e444f), ~150k tris, 5.5 MB
+const CAR_MODELS = {
+    bmw:   { url: 'models/bmw_x7.glb', length: 5.1, flip: 0, root: null, jobs: [], failed: false },
+    tesla: { url: 'models/tesla_model3.glb', length: 4.69, flip: 1, ref: /^(body_primary|wheels)/, root: null, jobs: [], failed: false }
+};
+// Two-wallbox charging kiosk (green steel cabinet, 2 wall boxes with Type 2 cables), models/ev_charger.glb: converted from the
+// supplied STEP CAD (SolidWorks 2021) with OpenCascade, welded + decimated to ~90k tris, 3 MB. Origin = floor centre of the
+// cabinet, front towards +z, 0.7 x 1.55 x 0.28 m. The old post stays as the fallback.
+const EVCH = { parent: null, fallback: null, ledMat: null, pos: [-5.45, 0, 16.4], rotY: -Math.PI / 2 };
+function loadEvCharger() {
+    new THREE.GLTFLoader().load('models/ev_charger.glb', g => {
+        const root = g.scene;
+        root.traverse(o => {
+            if (!o.isMesh) return;
+            o.castShadow = o.receiveShadow = true;
+            if (o.material.name === 'c_0.1,0.3,0.05' || o.material.name === 'c_0.55,0.57,0.6') { o.material.color.setHex(0x74d12c); o.material.roughness = 0.5; } // cabinet lid (CAD colour dark) + uncoloured body panels: the supplied render is lime green
+        });
+        const grp = new THREE.Group(); grp.add(root); grp.position.set(...EVCH.pos); grp.rotation.y = EVCH.rotY;
+        const led = new THREE.Mesh(new THREE.SphereGeometry(0.03, 12, 8), EVCH.ledMat); led.position.set(0, 1.47, 0.16); grp.add(led); // charging status LED (see updateEv)
+        if (EVCH.fallback) EVCH.fallback.parent.remove(EVCH.fallback);
+        EVCH.parent.add(grp);
+    }, undefined, e => console.warn('ev charger model failed to load', e));
+}
+// Charge cable from the kiosk's near wallbox to the Tesla's charge port (rear left tail-light). It pays out from the wallbox when
+// charging is switched on (START CHARGING / tablet / tour) and is drawn back in when it stops; while power flows, energy pulses
+// run along it and the port glows green (amber while waiting for solar). Positions are world metres.
+const EVCABLE = {
+    group: null, tube: null, plug: null, glow: null, light: null, beads: [], curve: null, p: 0, idxCount: 0,
+    // from = near wallbox holster on the kiosk front; port = plug tip on the Tesla's rear-left tail-light (car x -7.5, rear face z = 13.65,
+    // left side = +x as the car faces +z). Measured from the loaded models, see addCarModel / ev_charger.glb.
+    from: new THREE.Vector3(-5.6, 0.95, 16.25), port: new THREE.Vector3(-6.72, 0.93, 13.655)
+};
+function buildEvCable() {
+    const A = EVCABLE.from, B = EVCABLE.port;
+    const end = new THREE.Vector3(B.x, B.y, B.z - 0.16); // back of the plug
+    EVCABLE.curve = new THREE.CatmullRomCurve3([
+        A.clone(), new THREE.Vector3(A.x - 0.04, 0.55, A.z - 0.25), new THREE.Vector3(A.x - 0.12, 0.08, A.z - 0.8),
+        new THREE.Vector3(-6.2, 0.05, 14.9), new THREE.Vector3(-6.4, 0.05, 14.0), new THREE.Vector3(-6.62, 0.12, 13.2),
+        new THREE.Vector3(B.x, B.y * 0.45, B.z - 0.5), end
+    ], false, 'catmullrom', 0.5);
+    const g = new THREE.Group(); g.visible = false;
+    const geo = new THREE.TubeGeometry(EVCABLE.curve, 80, 0.016, 8, false);
+    const rubber = new THREE.MeshStandardMaterial({ color: 0x101214, roughness: 0.6 });
+    EVCABLE.tube = new THREE.Mesh(geo, rubber); EVCABLE.tube.castShadow = true; EVCABLE.idxCount = geo.index.count; g.add(EVCABLE.tube);
+    const plug = new THREE.Group();
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.026, 0.13, 12), rubber); body.rotation.z = Math.PI / 2; plug.add(body);
+    const tip = new THREE.Mesh(new THREE.CylinderGeometry(0.024, 0.024, 0.03, 12), new THREE.MeshStandardMaterial({ color: 0x9aa0a6, metalness: 0.7, roughness: 0.3 })); tip.rotation.z = Math.PI / 2; tip.position.x = 0.08; plug.add(tip);
+    plug.position.set(B.x, B.y, B.z - 0.095); plug.rotation.y = -Math.PI / 2; EVCABLE.plug = plug; // body axis (+x local) turned to +z: tip into the car plug.visible = false; g.add(plug);
+    EVCABLE.glow = new THREE.Mesh(new THREE.SphereGeometry(0.05, 12, 8), new THREE.MeshBasicMaterial({ color: 0x84cc16, transparent: true, opacity: 0.85 }));
+    EVCABLE.glow.position.set(B.x, B.y, B.z - 0.02); g.add(EVCABLE.glow);
+    EVCABLE.light = new THREE.PointLight(0x84cc16, 0, 2.6, 2); EVCABLE.light.position.set(B.x, B.y + 0.1, B.z - 0.3); g.add(EVCABLE.light);
+    const beadMat = new THREE.MeshBasicMaterial({ color: 0xbef264 });
+    for (let i = 0; i < 9; i++) { const b = new THREE.Mesh(new THREE.SphereGeometry(0.024, 8, 6), beadMat); b.visible = false; EVCABLE.beads.push(b); g.add(b); }
+    EVCABLE.group = g; siteGroup.add(g);
+}
+function evCableTick(dt, t) {
+    const E = EVCABLE; if (!E.group) return;
+    const target = isEvCharging ? 1 : 0;
+    E.p += Math.sign(target - E.p) * Math.min(Math.abs(target - E.p), dt * 0.7);   // ~1.4 s to deploy / retract
+    E.group.visible = E.p > 0.001;
+    if (!E.group.visible) return;
+    E.tube.geometry.setDrawRange(0, Math.max(6, Math.floor(E.idxCount * E.p / 6) * 6));
+    const connected = E.p >= 0.999;
+    E.plug.visible = connected;
+    const charging = connected && evPowerKw > 0, waiting = connected && isEvCharging && evPowerKw <= 0;
+    E.glow.visible = connected; E.glow.material.color.setHex(charging ? 0x84cc16 : 0xfbbf24);
+    E.glow.material.opacity = charging ? 0.55 + 0.35 * Math.sin(t * 5) : waiting ? 0.4 + 0.3 * Math.sin(t * 2) : 0;
+    E.light.color.setHex(charging ? 0x84cc16 : 0xfbbf24); E.light.intensity = charging ? 0.5 + 0.25 * Math.sin(t * 5) : waiting ? 0.2 : 0;
+    const speed = 0.12 + 0.55 * Math.min(1, evPowerKw / 11);
+    E.beads.forEach((b, i) => {
+        b.visible = charging;
+        if (charging) { const u = ((t * speed + i / E.beads.length) % 1); b.position.copy(E.curve.getPointAt(u)); }
+    });
+}
+// Pool water: UJWAL "water waves" (CC BY 4.0, https://sketchfab.com/3d-models/water-waves-142c2596d1944cd0bf4fc1f490c4c248). The source GLB is
+// 163 MB (500 baked morph-target frames), so its first wave tile was packed offline into models/water_waves.bin: 81x81 grid, 60 frames,
+// int16, loop-closed by cross-fading (2.4 MB). The pool surface is rebuilt from it as a morph-target mesh, scaled to the pool, and
+// played back; the flat water box stays until it loads (and if it fails). The old scrolling texture + LED colour logic keep running
+// on the same material, so the "moving effect" is waves + ripples.
+const POOLWAVE = { mesh: null, L: 0, infl: null, prev: [0, 1], fps: 4.3, ys: 0.001, edge: 0.2 };
+function loadPoolWaves(mesh, w, d) {
+    fetch('models/water_waves.bin').then(r => { if (!r.ok) throw new Error(r.status); return r.arrayBuffer(); }).then(buf => {
+        if (String.fromCharCode(...new Uint8Array(buf, 0, 4)) !== 'WAVE') throw new Error('bad header');
+        const dv = new DataView(buf), L = dv.getUint32(4, true), V = dv.getUint32(8, true), I = dv.getUint32(12, true), Q = dv.getFloat32(16, true);
+        const idx = new Uint16Array(buf.slice(32, 32 + I * 2)), raw = new Int16Array(buf, 32 + I * 2, L * V * 3);
+        // reference (mean) grid position of every vertex, normalised to the pool footprint; wave motion is added on top
+        const mx = new Float32Array(V), mz = new Float32Array(V);
+        for (let f = 0; f < L; f++) for (let v = 0; v < V; v++) { mx[v] += raw[(f * V + v) * 3] * Q / L; mz[v] += raw[(f * V + v) * 3 + 2] * Q / L; }
+        let x0 = 1e9, x1 = -1e9, z0 = 1e9, z1 = -1e9;
+        for (let v = 0; v < V; v++) { x0 = Math.min(x0, mx[v]); x1 = Math.max(x1, mx[v]); z0 = Math.min(z0, mz[v]); z1 = Math.max(z1, mz[v]); }
+        const kx = w / (x1 - x0), kz = d / (z1 - z0), cx = (x0 + x1) / 2, cz = (z0 + z1) / 2, E = POOLWAVE.edge;
+        const frames = [], normals = [], n = new THREE.Vector3(), a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
+        // face winding: make sure the surface faces up
+        let flip = false;
+        { const t = new Float32Array(V * 3); for (let v = 0; v < V; v++) { t[3*v] = (mx[v] - cx) * kx; t[3*v+2] = (mz[v] - cz) * kz; }
+          a.fromArray(t, 3 * idx[0]); b.fromArray(t, 3 * idx[1]).sub(a); c.fromArray(t, 3 * idx[2]).sub(a); flip = b.cross(c).y < 0; }
+        const ind = new Uint16Array(idx); if (flip) for (let t = 0; t < ind.length; t += 3) { const k = ind[t + 1]; ind[t + 1] = ind[t + 2]; ind[t + 2] = k; }
+        for (let f = 0; f < L; f++) {
+            const P = new Float32Array(V * 3);
+            for (let v = 0; v < V; v++) {
+                const o = (f * V + v) * 3, X = raw[o] * Q, Y = raw[o + 1] * Q, Z = raw[o + 2] * Q;
+                P[3*v] = (mx[v] - cx) * kx + (X - mx[v]) * kx * E; P[3*v+1] = Y * POOLWAVE.ys; P[3*v+2] = (mz[v] - cz) * kz + (Z - mz[v]) * kz * E;
+            }
+            const N = new Float32Array(V * 3);
+            for (let t = 0; t < ind.length; t += 3) {
+                a.fromArray(P, 3 * ind[t]); b.fromArray(P, 3 * ind[t + 1]).sub(a); c.fromArray(P, 3 * ind[t + 2]).sub(a); n.copy(b).cross(c);
+                for (let k = 0; k < 3; k++) { const vi = 3 * ind[t + k]; N[vi] += n.x; N[vi + 1] += n.y; N[vi + 2] += n.z; }
+            }
+            for (let v = 0; v < V; v++) { const l = Math.hypot(N[3*v], N[3*v+1], N[3*v+2]) || 1; N[3*v] /= l; N[3*v+1] /= l; N[3*v+2] /= l; }
+            frames.push(new THREE.BufferAttribute(P, 3)); normals.push(new THREE.BufferAttribute(N, 3));
+        }
+        const uv = new Float32Array(V * 2); for (let v = 0; v < V; v++) { uv[2*v] = (mx[v] - cx) / (x1 - x0) + 0.5; uv[2*v+1] = (mz[v] - cz) / (z1 - z0) + 0.5; }
+        const geo = new THREE.BufferGeometry();
+        geo.setAttribute('position', frames[0].clone()); geo.setAttribute('normal', normals[0].clone()); geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+        geo.setIndex(new THREE.BufferAttribute(new Uint16Array(ind), 1));
+        geo.morphAttributes.position = frames; geo.morphAttributes.normal = normals;
+        mesh.geometry.dispose(); mesh.geometry = geo; mesh.position.y = 0.5;
+        const m = mesh.material; m.morphTargets = true; m.morphNormals = true; m.side = THREE.DoubleSide;
+        m.roughness = 0.08; m.needsUpdate = true;
+        mesh.updateMorphTargets(); POOLWAVE.mesh = mesh; POOLWAVE.L = L; POOLWAVE.infl = mesh.morphTargetInfluences;
+    }).catch(e => console.warn('pool wave data failed to load; flat water kept', e));
+}
+function poolWavesTick(t) {
+    const W = POOLWAVE; if (!W.mesh) return;
+    const ph = (t * W.fps) % W.L, i = Math.floor(ph), f = ph - i, j = (i + 1) % W.L;
+    W.infl[W.prev[0]] = 0; W.infl[W.prev[1]] = 0; W.infl[i] = 1 - f; W.infl[j] = f; W.prev = [i, j];
+}
+// Parth "Modern Outdoor Bollard Light" (CC BY 4.0, https://sketchfab.com/3d-models/modern-outdoor-bollard-light-da027f300b8541519dc1dc84f4f42468),
+// models/bollard.glb (textures cut to 256 px, 67 kB). Used for every bollard lamp: drive, pool deck, garage lane. The lamp face
+// ("Material_49") and the glass band round it ("Material_61") are replaced by the caller's shared emissive material so the day/night and pool-light controls still drive it.
+// The old box bollard is the fallback until the model loads.
+const BOLLARD = { root: null, size: null, jobs: [], failed: false };
+function loadBollard() {
+    new THREE.GLTFLoader().load('models/bollard.glb', g => {
+        g.scene.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = false; } });
+        g.scene.updateMatrixWorld(true);
+        const b = new THREE.Box3().setFromObject(g.scene); BOLLARD.root = g.scene; BOLLARD.size = b.getSize(new THREE.Vector3()); BOLLARD.base = new THREE.Vector3((b.min.x + b.max.x) / 2, b.min.y, (b.min.z + b.max.z) / 2);
+        BOLLARD.jobs.splice(0).forEach(j => j());
+    }, undefined, e => { BOLLARD.failed = true; BOLLARD.jobs.length = 0; console.warn('bollard model failed to load', e); });
+}
+// Bright bollards: the lamp face is a tiny emissive quad, so every bollard also gets a soft halo round the lamp head and a pool of light on the ground.
+// Both are additive and fade with the lamp's own emissive intensity (day / night, pool-light circuit), so the existing controls drive them.
+const BOLHALO = { tex: null, mats: new Map(), running: false };
+function addBollardGlow(parent, x, z, y, h, glowMat) {
+    if (!BOLHALO.tex) { const c = document.createElement('canvas'); c.width = c.height = 128; const g = c.getContext('2d'), r = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+        r.addColorStop(0, 'rgba(255,236,200,1)'); r.addColorStop(0.25, 'rgba(255,214,150,0.55)'); r.addColorStop(1, 'rgba(255,190,110,0)'); g.fillStyle = r; g.fillRect(0, 0, 128, 128); BOLHALO.tex = new THREE.CanvasTexture(c); }
+    let M = BOLHALO.mats.get(glowMat);
+    if (!M) { M = { halo: new THREE.SpriteMaterial({ map: BOLHALO.tex, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }),
+        pool: new THREE.MeshBasicMaterial({ map: BOLHALO.tex, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }), src: glowMat }; BOLHALO.mats.set(glowMat, M); }
+    const sp = new THREE.Sprite(M.halo); sp.scale.setScalar(1.5); sp.position.set(x, y + h * 0.9, z); sp.renderOrder = 6; parent.add(sp);
+    const gp = new THREE.Mesh(new THREE.CircleGeometry(1.9, 24), M.pool); gp.rotation.x = -Math.PI / 2; gp.position.set(x, y + 0.03, z); gp.renderOrder = 5; parent.add(gp);
+    if (!BOLHALO.running) { BOLHALO.running = true; const tick = () => { BOLHALO.mats.forEach(m => { const k = m.src.emissiveIntensity; m.halo.opacity = Math.min(1, k * 0.32); m.pool.opacity = Math.min(0.85, k * 0.2); }); requestAnimationFrame(tick); }; tick(); }
+}
+// bollard at (x, z) standing on y, height h (m). buildFallback() creates the placeholder meshes and returns them.
+function addBollard(parent, x, z, y, h, glowMat, buildFallback) {
+    const parts = buildFallback ? buildFallback() : [];
+    const job = () => {
+        parts.forEach(p => p.parent && p.parent.remove(p));
+        const m = BOLLARD.root.clone(true), holder = new THREE.Group(), k = h / BOLLARD.size.y;
+        m.position.set(-BOLLARD.base.x, -BOLLARD.base.y, -BOLLARD.base.z); holder.add(m);
+        if (glowMat) { glowMat.side = THREE.DoubleSide; m.traverse(o => { if (o.isMesh && (o.material.name === 'Material_49' || o.material.name === 'Material_61')) o.material = glowMat; }); } // lamp face (single quad, under the cap) + the glass band round it: both glow with the shared material
+        holder.scale.setScalar(k); holder.position.set(x, y, z); parent.add(holder);
+        if (glowMat) addBollardGlow(parent, x, z, y, h, glowMat);
+    };
+    if (BOLLARD.root) job(); else if (!BOLLARD.failed) BOLLARD.jobs.push(job);
+}
+// adventurer "Road_ Avenue_ street" (CC BY 4.0, https://sketchfab.com/3d-models/road--avenue--street-7f657c3eceb343ceaf5e542c50dab27a), models/road.glb
+// (textures 1K). Two-lane asphalt strip with edge lines, dashed centre line and edge reflectors; 10 m x 15 m at 0.01. Tiled along the drive.
+// One80 Solar "Solar Edge Single Phase Inverter 240 V" (CC BY 4.0, https://sketchfab.com/3d-models/solar-edge-single-phase-inverter-240-v-43a0699c5331421e9446c570196b1a5e),
+// models/inverter.glb (0.31 x 0.76 x 0.16 m, origin = back-centre).
+const EXTRA = { road: { root: null, jobs: [], failed: false, url: 'models/road.glb' }, inverter: { root: null, jobs: [], failed: false, url: 'models/inverter.glb' } };
+function loadExtraModels() {
+    Object.entries(EXTRA).forEach(([name, M]) => new THREE.GLTFLoader().load(M.url, g => {
+        g.scene.traverse(o => { if (o.isMesh) { o.receiveShadow = true; o.castShadow = name !== 'road'; o.material.normalMap = null; if (name === 'road') { o.material.color.setScalar(1.9); o.material.roughness = 0.9; o.material.metalness = 0; } o.material.needsUpdate = true; } });
+        g.scene.updateMatrixWorld(true);
+        const b = new THREE.Box3().setFromObject(g.scene); M.root = g.scene; M.size = b.getSize(new THREE.Vector3()); M.box = b;
+        M.jobs.splice(0).forEach(j => j());
+    }, undefined, e => { M.failed = true; M.jobs.length = 0; console.warn(name + ' model failed to load', e); }));
+}
+function extraModel(name, job) { const M = EXTRA[name]; if (M.root) job(M); else if (!M.failed) M.jobs.push(() => job(M)); }
+// lay the road model along a drive: footprint x0..x1 (width) by z0..z1 (length), top surface at y, whole tiles along z
+function addRoadStrip(parent, x0, x1, z0, z1, y, fallback) {
+    extraModel('road', M => {
+        fallback.forEach(p => p.parent && p.parent.remove(p));
+        const W0 = M.size.x, L0 = M.size.z, n = Math.max(1, Math.round((z1 - z0) / (L0 * (x1 - x0) / W0))), sx = (x1 - x0) / W0, sz = (z1 - z0) / n / L0, sy = sx;
+        for (let i = 0; i < n; i++) {
+            const m = M.root.clone(true), h = new THREE.Group(); h.add(m);
+            h.scale.set(sx, sy, sz); h.position.set((x0 + x1) / 2, y - M.box.max.y * 0 , z0 + (i + 0.5) * (z1 - z0) / n); parent.add(h);
+        }
+    });
+}
+function loadCarModels() {
+    Object.entries(CAR_MODELS).forEach(([name, M]) => new THREE.GLTFLoader().load(M.url, g => {
+        const root = g.scene, env = carEnv();
+        root.traverse(o => {
+            if (!o.isMesh) return;
+            o.castShadow = o.receiveShadow = true;
+            (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => { if (m.metalness > 0.1 || m.roughness < 0.2) { m.envMap = env; m.envMapIntensity = 1.1; m.needsUpdate = true; } });
+        });
+        root.updateMatrixWorld(true);
+        // size / ground level / centre come from the reference meshes when given (the Tesla has stray parts far below the wheels)
+        const b = new THREE.Box3();
+        if (M.ref) root.traverse(o => { if (o.isMesh && M.ref.test(o.name)) b.expandByObject(o); }); else b.setFromObject(root);
+        M.root = root; M.size = b.getSize(new THREE.Vector3()); M.base = new THREE.Vector3((b.min.x + b.max.x) / 2, b.min.y, (b.min.z + b.max.z) / 2);
+        M.jobs.splice(0).forEach(j => j());
+    }, undefined, e => { M.failed = true; M.jobs.length = 0; console.warn(name + ' model failed to load', e); }));
+}
+// parked car model at (x, z); rot = yaw, same convention as addLuxuryCar's rot
+function addCarModel(name, x, z, rot, paintHex) {
+    const M = CAR_MODELS[name], n0 = siteGroup.children.length;
+    addLuxuryCar(x, z, rot, paintHex, paintHex);
+    const parts = siteGroup.children.slice(n0);
+    const job = () => {
+        parts.forEach(p => p.parent && p.parent.remove(p));
+        const L = Math.max(M.size.x, M.size.z), k = M.length / L, holder = new THREE.Group(), m = M.root.clone(true);
+        m.position.set(-M.base.x, -M.base.y, -M.base.z); holder.add(m);
+        holder.scale.setScalar(k); holder.rotation.y = rot + (M.size.x >= M.size.z ? 0 : -Math.PI / 2) + M.flip * Math.PI; holder.position.set(x, 0, z); siteGroup.add(holder);
+    };
+    if (M.root) job(); else if (!M.failed) M.jobs.push(job);
+}
 function addLuxuryCar(x, z, rot, paintHex, upperHex) {
     const env = carEnv(), g = new THREE.Group();
     const paint = new THREE.MeshPhysicalMaterial({ color: paintHex, metalness: 0.65, roughness: 0.3, clearcoat: 1, clearcoatRoughness: 0.04, envMap: env, envMapIntensity: 1.1 });
@@ -2218,19 +2696,23 @@ function buildSite() {
     pav.rotation.x = -Math.PI / 2; pav.position.set(0, 0.01, 17); pav.receiveShadow = true; siteGroup.add(pav);
 
     // boundary wall + sliding gate
-    const wallM = MAT.plaster, zf = 24, zb = -16, xl = -20, xr = 20;
-    box(xr - xl, 2.2, 0.3, wallM, 0, 1.1, zb, siteGroup);
-    box(0.3, 2.2, zf - zb, wallM, xl, 1.1, (zf + zb) / 2, siteGroup);
-    box(0.3, 2.2, zf - zb, wallM, xr, 1.1, (zf + zb) / 2, siteGroup);
-    box(2 - xl, 2.2, 0.3, wallM, (xl + 2) / 2, 1.1, zf, siteGroup);
-    box(xr - 10, 2.2, 0.3, wallM, (xr + 10) / 2, 1.1, zf, siteGroup);
+    const wallM = MAT.brickWall, zf = 24, zb = -16, xl = -20, xr = 20;
+    fenceGroup = new THREE.Group(); siteGroup.add(fenceGroup); fenceGroup.visible = fenceOn; // boundary wall + gate: hidden by the "Boundary wall & gate" tick box
+    box(xr - xl - 0.3, 2.2, 0.3, wallM, 0, 1.1, zb, fenceGroup);
+    box(0.3, 2.2, zf - zb + 0.3, wallM, xl, 1.1, (zf + zb) / 2, fenceGroup);
+    box(0.3, 2.2, zf - zb + 0.3, wallM, xr, 1.1, (zf + zb) / 2, fenceGroup);
+    box(2 - xl - 0.15, 2.2, 0.3, wallM, (xl + 0.15 + 2) / 2, 1.1, zf, fenceGroup);
+    box(xr - 0.15 - 10, 2.2, 0.3, wallM, (xr - 0.15 + 10) / 2, 1.1, zf, fenceGroup);
     slidingGate = new THREE.Group();
     for (let i = 0; i < 26; i++) box(0.12, 2.0, 0.08, MAT.frame, -3.9 + i * 0.31, 1.0, 0, slidingGate);
     box(8, 0.1, 0.1, MAT.frame, 0, 2.0, 0, slidingGate); box(8, 0.1, 0.1, MAT.frame, 0, 0.1, 0, slidingGate);
-    slidingGate.position.set(6, 0, zf + 0.3); siteGroup.add(slidingGate);
+    slidingGate.position.set(6, 0, zf + 0.3); fenceGroup.add(slidingGate);
     for (let i = 0; i < 6; i++) { // bollard lights along drive (west row kept clear of the carport bays)
-        const b = box(0.15, 0.7, 0.15, MAT.dark, i % 2 ? 10.5 : -2.9, 0.35, 12 + Math.floor(i / 2) * 4, siteGroup);
-        const cap = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.08, 0.16), MAT.extGlow); cap.position.set(b.position.x, 0.62, b.position.z); siteGroup.add(cap);
+        const bx = i % 2 ? 10.5 : -2.9, bz = 12 + Math.floor(i / 2) * 4;
+        addBollard(siteGroup, bx, bz, 0, 0.72, MAT.extGlow, () => {
+            const b = box(0.15, 0.7, 0.15, MAT.dark, bx, 0.35, bz, siteGroup);
+            const cap = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.08, 0.16), MAT.extGlow); cap.position.set(bx, 0.62, bz); siteGroup.add(cap); return [b, cap];
+        });
     }
 
     // carport canopy with V-shaped carved pillar (photo)
@@ -2248,11 +2730,12 @@ function buildSite() {
     const padAsph = new THREE.MeshStandardMaterial({ color: 0x3a3d42, roughness: 0.95 });
     addParkingPad(-12.6, -4.2, 12.9, 23.6, [-12.0, -9.0, -6.0], 'WN', padConc);
     addParkingPad(11.5, 18.5, 14.5, 20.5, [12.0, 15.0, 18.0], 'NES', padAsph);   // moved south: the garage lane runs north from the paving beside it
-    addLuxuryCar(-10.5, 16.0, Math.PI / 2, 0x1b2a44, 0xc9cdd3);   // midnight blue, silver upper
-    addLuxuryCar(-7.5, 16.0, Math.PI / 2, 0x0b0b0c, 0x0b0b0c);   // black, on the EV charger bay
+    addCarModel('bmw', -10.5, 16.0, Math.PI / 2, 0x1b2a44);   // BMW X7 M60i in the west bay
+    addCarModel('tesla', -7.5, 16.0, Math.PI / 2, 0xb91c1c);  // Tesla Model 3 on the EV-charger bay
 
     const charger = new THREE.Group();
     charger.position.set(-5.7, 0, 16.4);
+    EVCH.parent = siteGroup; EVCH.fallback = charger;
     box(0.48, 0.12, 0.42, MAT.dark, 0, 0.06, 0, charger);
     box(0.34, 1.18, 0.24, MAT.devWhite, 0, 0.71, 0, charger);
     box(0.23, 0.35, 0.025, MAT.devDark, 0, 0.88, 0.133, charger);
@@ -2268,23 +2751,15 @@ function buildSite() {
     box(0.045, 0.8, 0.03, trimMat, -0.12, 0.71, 0.135, charger);
     evChargerLed = new THREE.MeshStandardMaterial({ color: 0xfbbf24, emissive: 0x78350f, emissiveIntensity: 0.8 });
     const led = new THREE.Mesh(new THREE.SphereGeometry(0.045, 12, 8), evChargerLed);
-    led.position.set(0.08, 1.12, 0.145); charger.add(led);
+    led.position.set(0.08, 1.12, 0.145); charger.add(led); EVCH.ledMat = evChargerLed;
     siteGroup.add(charger);
-    const cableCurve = new THREE.CatmullRomCurve3([
-        new THREE.Vector3(-5.53, 0.52, 16.42),
-        new THREE.Vector3(-6.2, 0.62, 16.38),
-        new THREE.Vector3(-7.0, 0.58, 16.08),
-        new THREE.Vector3(-8.2, 0.62, 16.08)
-    ]);
-    siteGroup.add(new THREE.Mesh(new THREE.TubeGeometry(cableCurve, 24, 0.035, 8, false), MAT.devDark));
-    const plug = new THREE.Mesh(new THREE.CylinderGeometry(0.065, 0.065, 0.16, 12), MAT.devDark);
-    plug.rotation.z = Math.PI / 2; plug.position.set(-8.24, 0.62, 16.08); siteGroup.add(plug);
     evChargerLight = new THREE.PointLight(0x22d3ee, 0.05, 4, 2);
     evChargerLight.position.set(-5.7, 1.05, 16.4); siteGroup.add(evChargerLight);
+    buildEvCable();
 
     // planting
     addTree(-16, 9, 1.25); addTree(-15, -9, 1.0); addTree(18.8, -6.0, 1.0);
-    addPalm(19.0, 22.4, 6.5); addPalm(17.4, 0.2, 7.5); addPalm(-17.5, 21, 6); addPalm(18.0, -4.2, 6.8);
+    addPalm(19.0, 22.4, 6.5); addPalm(17.4, 0.2, 7.5); addPalm(-17.5, 21, 6);
     for (let i = 0; i < 10; i++) addShrub(-19.3 + Math.random() * 2, 10 + Math.random() * 12, 0.5 + Math.random() * 0.3);
     for (let i = 0; i < 8; i++) { const sx = 16 + Math.random() * 3, sz = Math.random() * 9; if (sx > 13.2 && sx < 18.2 && sz > 2.4 && sz < 8.6) continue; addShrub(sx, sz, 0.6 + Math.random() * 0.4); }
 
@@ -2299,6 +2774,7 @@ function buildSite() {
     plungeWaterMat = poolWaterMat.clone();
     const water = new THREE.Mesh(new THREE.BoxGeometry(p2.x - p1.x, 0.04, p2.z - p1.z), poolWaterMat);
     water.position.set((p1.x + p2.x) / 2, 0.49, (p1.z + p2.z) / 2); floorGroups.GF.add(water);
+    loadPoolWaves(water, p2.x - p1.x, p2.z - p1.z);
     const c0 = W('GF', 502, 685);
     const plunge = new THREE.Mesh(new THREE.CylinderGeometry(1.45, 1.45, 0.06, 32), plungeWaterMat); plunge.position.set(c0.x, 0.49, c0.z); floorGroups.GF.add(plunge);
     const ring = new THREE.Mesh(new THREE.CylinderGeometry(1.65, 1.65, 0.05, 32), MAT.coping); ring.position.set(c0.x, 0.465, c0.z); floorGroups.GF.add(ring);
@@ -2310,9 +2786,11 @@ function buildSite() {
     poolFx.uplightMat = new THREE.MeshStandardMaterial({ color: 0x1f2937, emissive: 0xffc27a, emissiveIntensity: 0 });
     floorGroups.GF.add(poolFx.under, poolFx.plunge, poolFx.deck);
     [[-9.4, -0.3], [-7.6, -0.3], [-5.75, 1.6], [-5.75, 3.6], [-9.4, 9.45], [-7.6, 9.45], [-3.0, 9.45]].forEach(([x, z]) => {
-        const post = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.07, 0.55, 10), MAT.devDark); post.position.set(x, 0.715, z);
-        const head = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.075, 0.08, 10), poolFx.bollardMat); head.position.set(x, 0.94, z);
-        floorGroups.GF.add(post, head);
+        addBollard(floorGroups.GF, x, z, 0.44, 0.6, poolFx.bollardMat, () => {
+            const post = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.07, 0.55, 10), MAT.devDark); post.position.set(x, 0.715, z);
+            const head = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.075, 0.08, 10), poolFx.bollardMat); head.position.set(x, 0.94, z);
+            floorGroups.GF.add(post, head); return [post, head];
+        });
     });
     const cols = [[487,432],[578,433],[487,597],[578,595]].map(([px, py]) => W('GF', px, py));
     cols.forEach(p => {
@@ -2325,7 +2803,7 @@ function buildSite() {
     const pg1 = W('GF', 470, 360), pg2 = W('GF', 645, 610); pg2.x = Math.min(pg2.x, W('F1', 470, 0).x - 0.15);
     for (let x = pg1.x; x <= pg2.x; x += 0.45) box(0.08, 0.25, pg2.z - pg1.z, MAT.wood, x, LEVEL.F1 + 0.1, (pg1.z + pg2.z) / 2, floorGroups.F1, 1);
     box(pg2.x - pg1.x, 0.2, 0.15, MAT.wood, (pg1.x + pg2.x) / 2, LEVEL.F1 - 0.05, pg2.z, floorGroups.F1, 1);
-    for (let i = 0; i < 4; i++) addShrub(d1.x + 0.6, d1.z + 1 + i * 2.2, 0.5, 0.44);
+    // deck planting: see pool_plants.js (snake plants and maidenhair ferns)
 }
 
 /* =====================================================================
@@ -2573,6 +3051,14 @@ function initScene() {
     controls = new THREE.OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true; controls.dampingFactor = 0.06; controls.maxPolarAngle = Math.PI / 2 + 0.05;
     controls.minDistance = 0.6; controls.maxDistance = 140;
+    // Free rotation: a trackball camera turns about every axis (over the top, underneath, rolling), unlike the orbit camera that stops at
+    // the poles / ground. Left-drag rotates, right-drag pans, wheel zooms. Switchable from the Devices tab; on by default.
+    orbitControls = controls;
+    trackControls = new THREE.TrackballControls(camera, renderer.domElement);
+    Object.assign(trackControls, { rotateSpeed: 2.4, zoomSpeed: 1.1, panSpeed: 0.9, staticMoving: false, dynamicDampingFactor: 0.1, minDistance: 0.6, maxDistance: 140 });
+    trackControls.enabled = false;
+    setFreeRotation(true);
+    setupZoomToCursor();
 
     hemiLight = new THREE.HemisphereLight(0xbcd3ef, 0x6b5a45, 0.5); scene.add(hemiLight);
     sunLight = new THREE.DirectionalLight(0xffc58a, 0.6);
@@ -2580,9 +3066,9 @@ function initScene() {
     Object.assign(sunLight.shadow.camera, { near: 1, far: 200, left: -35, right: 35, top: 35, bottom: -35 });
     sunLight.shadow.bias = -0.0005; sunLight.shadow.camera.updateProjectionMatrix(); scene.add(sunLight, sunLight.target);
 
-    loadSofaModel(); buildTextures(); buildMaterials(); buildDeviceGeometry();
+    loadSofaModel(); loadCinemaSofa(); loadBarStool(); loadTreeModel(); loadBollard(); loadExtraModels(); loadRoofModels(); loadCarModels(); loadEvCharger(); buildTextures(); buildMaterials(); buildDeviceGeometry();
     scene.add(siteGroup, extGroup); Object.values(floorGroups).forEach(g => scene.add(g));
-    buildSite(); buildBuilding(); buildStaircases(); buildInterior(); buildBasementCinema(); buildRoomLabels(); restorePanels(); buildDevices(); buildRoomLights(); buildExtras(); setupCCTVSystem(); setupParticles(); scatterGrass(); loadMasterBedroom();
+    buildSite(); buildBuilding(); buildStaircases(); buildInterior(); buildBasementCinema(); buildRoomLabels(); restorePanels(); buildDevices(); buildRoomLights(); buildExtras(); setupCCTVSystem(); setupParticles(); scatterGrass(); loadMasterBedroom(); loadLivingRoom();
 
     raycaster = new THREE.Raycaster();
     renderer.domElement.addEventListener('pointermove', onPointerMove);
@@ -2626,7 +3112,7 @@ function applyEnvironment() {
     sunLight.position.set(...s.sunPos); renderer.toneMappingExposure = s.exp;
     const showExt = extOn && s.dark;
     extLights.forEach(e => e.light.intensity = showExt ? e.base : 0);
-    extEmissive.forEach(m => m.emissiveIntensity = showExt ? 1.4 : 0.0);
+    extEmissive.forEach(m => m.emissiveIntensity = showExt ? 3.2 : 0.0);
     planMats.forEach(m => m.emissiveIntensity = s.dark ? 0.12 : 0.22);
 }
 
@@ -3046,7 +3532,7 @@ function updatePoolLights(t) {
     poolWaterMat.emissive.copy(poolColor); poolWaterMat.emissiveIntensity = 0.04 + 0.75 * ku * glow;
     poolFx.plunge.color.copy(poolColor); poolFx.plunge.intensity = 1.2 * kp * out;
     plungeWaterMat.emissive.copy(poolColor); plungeWaterMat.emissiveIntensity = 0.04 + 0.75 * kp * glow;
-    poolFx.bollardMat.emissiveIntensity = 2.2 * kd; poolFx.deck.intensity = 1.3 * kd * out;
+    poolFx.bollardMat.emissiveIntensity = 4.5 * kd; poolFx.deck.intensity = 1.3 * kd * out;
     poolFx.uplightMat.emissiveIntensity = 2.2 * kg; poolFx.pergola.intensity = 1.6 * kg * out;
 }
 
@@ -3426,6 +3912,7 @@ function onClick(e) {
    17. ANIMATION LOOP
 ===================================================================== */
 const clock = new THREE.Clock();
+const UP_Y = new THREE.Vector3(0, 1, 0);
 function animate() {
     requestAnimationFrame(animate);
     const dt = Math.min(clock.getDelta(), 0.05), now = performance.now(), t = now / 1000;
@@ -3433,6 +3920,7 @@ function animate() {
     if (camAnim) {
         camAnim.t = Math.min(1, camAnim.t + dt * 0.9); const e = camAnim.t < 0.5 ? 2 * camAnim.t * camAnim.t : 1 - Math.pow(-2 * camAnim.t + 2, 2) / 2;
         camera.position.lerpVectors(camAnim.sp, camAnim.ep, e); controls.target.lerpVectors(camAnim.st, camAnim.et, e);
+        camera.up.lerp(UP_Y, e).normalize(); // undo any roll from free rotation while the camera flies to a preset
         if (camAnim.t >= 1) camAnim = null;
     }
     if (walk.active) updateWalk(dt);
@@ -3469,6 +3957,8 @@ function animate() {
     shedAnimate(dt);
     if (waterLevelMesh) waterLevelMesh.scale.y += (tankTarget - waterLevelMesh.scale.y) * 0.03;
     animateCinema(dt, t);
+    evCableTick(dt, t);
+    poolWavesTick(t);
     if (typeof premiumTick === 'function') premiumTick(dt, t);
     updatePoolLights(t);
     if (TEX.water) { TEX.water.offset.x = t * 0.02; TEX.water.offset.y = Math.sin(t * 0.5) * 0.03; }
@@ -3490,7 +3980,55 @@ function animate() {
     if (typeof cineComposite === 'function') cineComposite();
 }
 
+// Zoom to the spot under the cursor: the wheel moves camera and target towards / away from the surface point you point at, so that
+// point stays under the pointer. Double-click flies closer to a spot and makes it the new pivot.
+const zoomRay = new THREE.Raycaster();
+function zoomPick(clientX, clientY) {
+    camera.updateMatrixWorld(true);
+    const r = renderer.domElement.getBoundingClientRect();
+    zoomRay.setFromCamera({ x: (clientX - r.left) / r.width * 2 - 1, y: -((clientY - r.top) / r.height) * 2 + 1 }, camera);
+    const list = [];
+    (function walkTree(o) {
+        if (!o.visible) return;
+        if (o.isMesh && o.material && (Array.isArray(o.material) ? o.material : [o.material]).every(m => !m.transparent && m.side !== THREE.BackSide && m.visible !== false)) list.push(o);
+        o.children.forEach(walkTree);
+    })(scene);
+    const hit = zoomRay.intersectObjects(list, false)[0];
+    if (hit) return hit.point;
+    const g = zoomRay.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), new THREE.Vector3());   // sky / nothing hit: use the ground
+    return g || zoomRay.ray.at(controls.target.distanceTo(camera.position), new THREE.Vector3());
+}
+function zoomAt(clientX, clientY, factor) { // factor > 1 zooms in
+    const P = zoomPick(clientX, clientY), dist = camera.position.distanceTo(controls.target);
+    let k = 1 / factor; k = Math.max(0.6 / dist, Math.min(140 / dist, k));     // keep the pivot distance within 0.6 - 140 m
+    camAnim = null;
+    const dc = camera.position.clone().sub(P).multiplyScalar(k), dt = controls.target.clone().sub(P).multiplyScalar(k);
+    camera.position.copy(P).add(dc); controls.target.copy(P).add(dt);
+    camera.updateMatrixWorld(true);   // several wheel events can arrive before the next frame is rendered
+}
+function setupZoomToCursor() {
+    const el = renderer.domElement;
+    window.addEventListener('wheel', e => {
+        if (e.target !== el || !controls.enabled || (typeof walk !== 'undefined' && walk.active)) return;
+        e.preventDefault(); e.stopImmediatePropagation();
+        zoomAt(e.clientX, e.clientY, Math.exp(-Math.max(-300, Math.min(300, e.deltaY)) * 0.0016));
+    }, { capture: true, passive: false });
+    el.addEventListener('dblclick', e => {
+        if (!controls.enabled || (typeof walk !== 'undefined' && walk.active)) return;
+        const P = zoomPick(e.clientX, e.clientY), c = camera.position;
+        animateCameraPosition(P.x + (c.x - P.x) * 0.45, P.y + (c.y - P.y) * 0.45, P.z + (c.z - P.z) * 0.45, P.x, P.y, P.z);
+    });
+}
+function setFreeRotation(on) {
+    const from = controls, to = on ? trackControls : orbitControls, wasEnabled = from.enabled;
+    if (from === to) return;
+    to.target.copy(from.target); from.enabled = false; controls = to; to.enabled = wasEnabled;
+    if (!on) camera.up.set(0, 1, 0); // back to a level horizon for the orbit camera
+    to.update();
+    const cb = document.getElementById('freerot-toggle'); if (cb) cb.checked = on;
+}
 function onWindowResize() {
+    if (trackControls) trackControls.handleResize();
     camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
 }
@@ -3750,13 +4288,13 @@ function buildShed() {
     const steel = new THREE.MeshStandardMaterial({ color: 0x4b5563, metalness: 0.6, roughness: 0.45 });
     box(w + 0.5, 0.1, d + 0.5, MAT.coping, cx, 0.05, cz, g);
     box(w - 0.1, 0.02, d - 0.1, new THREE.MeshStandardMaterial({ color: 0x6b7280, roughness: 0.9 }), cx, 0.11, cz, g);
-    box(t, h, d, MAT.plaster, x1 - t / 2, h / 2, cz, g);
-    box(w, h, t, MAT.plaster, cx, h / 2, z0 + t / 2, g);
-    box(w, h, t, MAT.plaster, cx, h / 2, z1 - t / 2, g);
+    box(t, h, d, MAT.brickWall, x1 - t / 2, h / 2, cz, g);
+    box(w, h, t, MAT.brickWall, cx, h / 2, z0 + t / 2, g);
+    box(w, h, t, MAT.brickWall, cx, h / 2, z1 - t / 2, g);
     const seg = (cz - 0.65) - z0;
-    box(t, h, seg, MAT.plaster, x0 + t / 2, h / 2, z0 + seg / 2, g);
-    box(t, h, z1 - (cz + 0.65), MAT.plaster, x0 + t / 2, h / 2, (z1 + cz + 0.65) / 2, g);
-    box(t, h - 2.15, 1.3, MAT.plaster, x0 + t / 2, 2.15 + (h - 2.15) / 2, cz, g);
+    box(t, h, seg, MAT.brickWall, x0 + t / 2, h / 2, z0 + seg / 2, g);
+    box(t, h, z1 - (cz + 0.65), MAT.brickWall, x0 + t / 2, h / 2, (z1 + cz + 0.65) / 2, g);
+    box(t, h - 2.15, 1.3, MAT.brickWall, x0 + t / 2, 2.15 + (h - 2.15) / 2, cz, g);
     S.roof = new THREE.Group(); g.add(S.roof);
     box(w + 0.3, 0.2, d + 0.3, MAT.plaster, cx, h + 0.1, cz, S.roof); box(w + 0.4, 0.06, d + 0.4, MAT.coping, cx, h + 0.23, cz, S.roof);
     box(0.06, h, 0.06, steel, x1 + 0.06, h / 2, cz, g);   // PV string conduit coming down the outside wall
@@ -3777,13 +4315,18 @@ function buildShed() {
     // hybrid inverter on the east wall
     const ix = x1 - t - 0.1, iz = cz - 0.55;
     const inv = new THREE.Group(); inv.position.set(ix, 1.35, iz); inv.rotation.y = -Math.PI / 2; g.add(inv);
-    box(0.62, 0.8, 0.2, MAT.devWhite, 0, 0, 0, inv);
-    for (let i = 0; i < 6; i++) box(0.5, 0.012, 0.03, new THREE.MeshStandardMaterial({ color: 0xcbd5e1 }), 0, -0.3 + i * 0.03, 0.115, inv);
+    const invFallback = [box(0.62, 0.8, 0.2, MAT.devWhite, 0, 0, 0, inv)];
+    for (let i = 0; i < 6; i++) invFallback.push(box(0.5, 0.012, 0.03, new THREE.MeshStandardMaterial({ color: 0xcbd5e1 }), 0, -0.3 + i * 0.03, 0.115, inv));
+    // SolarEdge single-phase inverter (model origin = back-centre, front towards +z): hangs on the east wall at the old box's height
+    extraModel('inverter', M => {
+        invFallback.forEach(p => p.parent && p.parent.remove(p));
+        const m = M.root.clone(true); m.position.set(0, -0.38, -0.1); inv.add(m);   // 0.76 m tall, centred on y = 0 (1.35 m on the wall), back against the wall
+    });
     const ic = document.createElement('canvas'); ic.width = 300; ic.height = 190;
     const itex = new THREE.CanvasTexture(ic);
-    const iscr = new THREE.Mesh(new THREE.PlaneGeometry(0.46, 0.29), new THREE.MeshBasicMaterial({ map: itex })); iscr.position.set(0, 0.17, 0.101); inv.add(iscr);
+    const iscr = new THREE.Mesh(new THREE.PlaneGeometry(0.36, 0.23), new THREE.MeshBasicMaterial({ map: itex })); iscr.position.set(-0.4, 0.1, -0.088); inv.add(iscr);   // live status display on the wall beside the inverter
     S.inv = { cv: ic, tex: itex };
-    const ilead = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.015, 0.01), new THREE.MeshBasicMaterial({ color: 0x22c55e })); ilead.position.set(0, -0.12, 0.103); inv.add(ilead);
+    const ilead = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.012, 0.008), new THREE.MeshBasicMaterial({ color: 0x22c55e })); ilead.position.set(-0.4, -0.04, -0.086); inv.add(ilead);
     // battery stack
     const bz = cz + 0.55;
     for (let i = 0; i < 3; i++) {
@@ -3812,7 +4355,7 @@ function drawInverter() {
     const S = SHED; if (!S.inv) return;
     const g = S.inv.cv.getContext('2d'), load = shedLoad(), net = solarGenerationKw - load;
     g.fillStyle = '#04141f'; g.fillRect(0, 0, 300, 190);
-    g.fillStyle = '#8dc63f'; g.font = 'bold 16px Arial'; g.textAlign = 'left'; g.fillText('HYBRID INVERTER 10 kW', 12, 24);
+    g.fillStyle = '#8dc63f'; g.font = 'bold 16px Arial'; g.textAlign = 'left'; g.fillText('SOLAREDGE INVERTER 240 V', 12, 24);
     g.fillStyle = '#22c55e'; g.beginPath(); g.arc(280, 18, 6, 0, 7); g.fill();
     g.fillStyle = '#facc15'; g.font = 'bold 46px Arial'; g.fillText(solarGenerationKw.toFixed(1), 12, 82); g.font = '18px Arial'; g.fillText('kW  solar', 100, 80);
     g.fillStyle = '#e2e8f0'; g.font = '16px Arial';
@@ -3937,11 +4480,19 @@ function stopExperienceTour() {
     if (xp.saved) { roomLabelsOn = xp.saved.labels; markersOn = xp.saved.markers; xp.saved = null; xpUiSync(); refreshRoomLabels(); refreshMarkers(); }
 }
 
-window.onload = function () { initScene(); if (typeof premiumInit === 'function') premiumInit(); };
+window.onload = function () { initScene(); if (typeof premiumInit === 'function') premiumInit(); if (typeof closetInit === 'function') closetInit(); if (typeof poolPlantsInit === 'function') poolPlantsInit(); if (typeof extLightsInit === 'function') extLightsInit(); if (typeof diningInit === 'function') diningInit(); if (typeof kitchensInit === 'function') kitchensInit(); if (typeof gfRoomsInit === 'function') gfRoomsInit(); if (typeof studyInit === 'function') studyInit(); if (typeof suitesInit === 'function') suitesInit(); };
 </script>
 <script src="premium_features.js"></script>
 <script src="premium_fx.js"></script>
 <script src="premium_leak.js"></script>
 <script src="premium_cine.js"></script>
+<script src="walkin_closet.js"></script>
+<script src="study_office.js"></script>
+<script src="bedroom_suites.js"></script>
+<script src="pool_plants.js"></script>
+<script src="exterior_lights.js"></script>
+<script src="dining_room.js"></script>
+<script src="kitchens.js"></script>
+<script src="gf_rooms.js"></script>
 </body>
 </html>

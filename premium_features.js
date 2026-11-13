@@ -70,9 +70,9 @@ function premiumBuild3D() {
     // ---- garage with sectional door (motorised, linked to intercom / Miniserver)
     const g = new THREE.Group(); g.position.set(13.3, 0, -12.6); gs.add(g);
     const gw = 5.4, gd = 5, gh = 2.9;
-    box(gw, gh, 0.25, MAT.trav, 0, gh / 2, -gd / 2, g);               // back wall
-    box(0.25, gh, gd, MAT.trav, -gw / 2, gh / 2, 0, g);               // west wall
-    box(0.25, gh, gd, MAT.trav, gw / 2, gh / 2, 0, g);                // east wall
+    box(gw, gh, 0.25, MAT.brickWall, 0, gh / 2, -gd / 2, g);               // back wall
+    box(0.25, gh, gd, MAT.brickWall, -gw / 2, gh / 2, 0, g);               // west wall
+    box(0.25, gh, gd, MAT.brickWall, gw / 2, gh / 2, 0, g);                // east wall
     box(gw + 0.4, 0.22, gd + 0.5, MAT.coping, 0, gh + 0.11, 0.1, g);      // flat roof
     box(gw - 0.3, 0.05, gd - 0.3, MAT.dark, 0, 0.03, 0, g);                // floor
     box(gw, 0.5, 0.25, MAT.trav, 0, gh - 0.25, gd / 2, g);             // lintel
@@ -87,14 +87,15 @@ function premiumBuild3D() {
     // ---- driveway: asphalt lane from the paving beside the guest pad north to the garage forecourt
     const asph = new THREE.MeshStandardMaterial({ color: 0x3a3d42, roughness: 0.95 }), conc = new THREE.MeshStandardMaterial({ color: 0xbdb8ad, roughness: 0.95 });
     const lineM = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.6 });
-    const slabAt = (x0, x1, z0, z1, y) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(x1 - x0, z1 - z0), asph); m.rotation.x = -Math.PI / 2; m.position.set((x0 + x1) / 2, y, (z0 + z1) / 2); m.receiveShadow = true; gs.add(m); };
+    const slabAt = (x0, x1, z0, z1, y) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(x1 - x0, z1 - z0), asph); m.rotation.x = -Math.PI / 2; m.position.set((x0 + x1) / 2, y, (z0 + z1) / 2); m.receiveShadow = true; gs.add(m); return m; };
     const LX0 = 11.5, LX1 = 14.9, LZ0 = -7.4, LZ1 = 14.2, GX0 = 10.6, GX1 = 16.0, GZ0 = -10.1;
-    slabAt(LX0, LX1, LZ0, LZ1, 0.022);                      // main lane, 3.4 m wide, flush with the paving on its west side
+    const lanePieces = [slabAt(LX0, LX1, LZ0, LZ1, 0.022)];                      // main lane, 3.4 m wide, flush with the paving on its west side (road model swaps in)
     slabAt(GX0, GX1, GZ0, LZ0, 0.022);                      // forecourt in front of the garage, full door width plus margin
     box(GX1 - GX0 - 0.4, 0.02, 0.5, conc, (GX0 + GX1) / 2, 0.03, GZ0 + 0.35, gs);   // concrete threshold under the door
-    box(0.1, 0.006, LZ1 - LZ0, lineM, LX1 - 0.15, 0.028, (LZ0 + LZ1) / 2, gs);       // edge line, east
-    box(0.1, 0.006, LZ1 - LZ0, lineM, LX0 + 0.15, 0.028, (LZ0 + LZ1) / 2, gs);       // edge line, west
-    for (let z = LZ1 - 1; z > LZ0 + 1; z -= 2.2) box(0.08, 0.006, 1.1, lineM, (LX0 + LX1) / 2, 0.028, z, gs);   // dashed centre line
+    lanePieces.push(box(0.1, 0.006, LZ1 - LZ0, lineM, LX1 - 0.15, 0.028, (LZ0 + LZ1) / 2, gs));       // edge line, east
+    lanePieces.push(box(0.1, 0.006, LZ1 - LZ0, lineM, LX0 + 0.15, 0.028, (LZ0 + LZ1) / 2, gs));       // edge line, west
+    for (let z = LZ1 - 1; z > LZ0 + 1; z -= 2.2) lanePieces.push(box(0.08, 0.006, 1.1, lineM, (LX0 + LX1) / 2, 0.028, z, gs));   // dashed centre line
+    addRoadStrip(gs, LX0, LX1, LZ0, LZ1, 0.03, lanePieces);                          // "Road / Avenue / street" model replaces the asphalt, lines and dashes
     const k = 0.16, kh = 0.15;
     box(k, kh, LZ1 - LZ0, conc, LX1 + k / 2, kh / 2, (LZ0 + LZ1) / 2, gs);           // kerb along the east edge of the lane
     box(k, kh, LZ0 - GZ0, conc, GX1 + k / 2, kh / 2, (LZ0 + GZ0) / 2, gs);           // forecourt kerbs
@@ -102,8 +103,11 @@ function premiumBuild3D() {
     box(GX1 - LX1, kh, k, conc, (GX1 + LX1) / 2, kh / 2, LZ0 + k / 2, gs);
     box(LX0 - GX0, kh, k, conc, (LX0 + GX0) / 2, kh / 2, LZ0 + k / 2, gs);
     for (let i = 0; i < 5; i++) {                                                    // bollard lights along the lane
-        const bz = 10 - i * 4.2, b = box(0.15, 0.7, 0.15, MAT.dark, LX1 + 0.45, 0.35, bz, gs);
-        const cap = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.08, 0.16), MAT.extGlow); cap.position.set(b.position.x, 0.62, bz); gs.add(cap);
+        const bz = 10 - i * 4.2, bx = LX1 + 0.45;
+        addBollard(gs, bx, bz, 0, 0.72, MAT.extGlow, () => {
+            const b = box(0.15, 0.7, 0.15, MAT.dark, bx, 0.35, bz, gs);
+            const cap = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.08, 0.16), MAT.extGlow); cap.position.set(bx, 0.62, bz); gs.add(cap); return [b, cap];
+        });
     }
     const grate = new THREE.Mesh(new THREE.PlaneGeometry(GX1 - GX0 - 0.6, 0.18), MAT.frame); grate.rotation.x = -Math.PI / 2; grate.position.set((GX0 + GX1) / 2, 0.036, GZ0 + 0.85); gs.add(grate);   // drain channel
     addLuxuryCar(13.3, -12.7, Math.PI / 2, 0x7a1f1f, 0x7a1f1f);                      // car parked inside, seen when the door opens
