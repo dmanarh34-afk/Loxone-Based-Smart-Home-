@@ -3093,6 +3093,9 @@ function initScene() {
     switchTab('devices');
     setFloorFilter('ALL', true);
     triggerScene('DUSK');
+    // start with every device type unticked (legend + 3D); the cinematic tour switches the lighting / EV ones back on while it plays
+    TYPE_ORDER.forEach(t => setTypeVisible(t, false));
+    document.querySelectorAll('#legend-body input[type=checkbox]').forEach(c => { c.checked = false; });
     camera.position.set(-9, 3.4, 23.3); controls.target.set(1, 5, 5); controls.update();
     animate();
 }
@@ -3598,8 +3601,9 @@ function buildRoomLights() {
 // A fixed pool of lights is re-assigned to the floor being shown. Toggling .visible per floor changed the live light count,
 // and three.js recompiles every material shader whenever that count changes (multi-second freeze on floor switch).
 const ROOMLIGHT_POOL = { lights: null };
+let cineLightFloor = null;   // set by the cinematic tour so the room being filmed gets real light while all floors are shown
 function refreshRoomLights() {
-    const show = walk.active ? walk.floor : currentFloor, P = ROOMLIGHT_POOL;
+    const show = cineLightFloor || (walk.active ? walk.floor : currentFloor), P = ROOMLIGHT_POOL;
     const zs = Object.values(zones).filter(z => z.roomLight);
     if (!P.lights) {
         const perFloor = {}; zs.forEach(z => { perFloor[z.floor] = (perFloor[z.floor] || 0) + 1; });

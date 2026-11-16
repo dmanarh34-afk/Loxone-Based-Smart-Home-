@@ -50,7 +50,7 @@ function cineAuto(f, c, opt = {}) {
 function cineShots() {
     const table = IP('GF', 590, 480), bd = INTERIOR.F2.furniture.find(f => f[0] === 'bed'), ba = IP('F2', bd[1], bd[2]), bb = IP('F2', bd[3], bd[4]);
     const bx0 = Math.min(ba.x, bb.x), bx1 = Math.max(ba.x, bb.x), bz = (ba.z + bb.z) / 2, bcx = (bx0 + bx1) / 2, F2y = LEVEL.F2; // foot of the bed is on the -x side (headboard on +x)
-    const room = (f, c, cap, dur, o = {}) => ({ n: cap[0], dur, fov: o.fov || [46, 40], cap, floor: o.floor || 'ALL', exp: o.exp || 1.0, scene: o.scene, on: o.on, ...cineAuto(f, c, o) });
+    const room = (f, c, cap, dur, o = {}) => ({ n: cap[0], dur, fov: o.fov || [46, 40], cap, floor: o.floor || 'ALL', exp: o.exp || 1.0, scene: o.scene, on: o.on, lf: f, lc: c, ...cineAuto(f, c, o) });
     return [
         // chapter 1: the plot
         { n: 'Arrival', dur: 10, fov: [40, 30], cap: ['Plot 1 · Glenshire Hills', 'A Loxone smart home'], title: true, scene: 'DUSK', floor: 'ALL', exp: 1.0,
@@ -61,9 +61,12 @@ function cineShots() {
           pos: [[16, 2.2, 19], [10, 2.6, 25], [0, 3, 26], [-8, 3.4, 22]], look: [[1, 3.6, 6], [1, 3.8, 6], [1, 3.8, 6], [0, 3.8, 6]] },
         { n: 'Pool', dur: 8, fov: [32, 32], cap: ['Pool, plunge pool & louvred pergola', 'Underwater, deck and pergola lighting on Loxone'], scene: 'RELAX_POOL',
           pos: [[-17, 1.3, 14], [-13, 1.5, 11.5], [-10.5, 1.8, 8.5]], look: [[-6.5, 1.2, 4], [-6, 1.5, 4], [-5, 2, 3]] },
-        // chapter 2: ground floor
-        room('GF', [4.42, 7.96], ['Entrance', 'Video intercom, door tablet and welcome lighting'], 6, { scene: 'DEFAULT', prefer: -1.2, rmax: 3.2 }),
-        { n: 'Living', exp: 0.9, dur: 10, fov: [48, 52], cap: ['Living & dining', 'Scenes, shades and multiroom audio in one touch'], floor: 'ALL',
+        { n: 'EV charging', dur: 9, fov: [34, 34], cap: ['EV charging', 'Loxone wallbox: PV-surplus or fast charge, shed first when the grid is lost'], exp: 1.0,
+          on: () => { setEvChargeMode('fast'); if (!isEvCharging) toggleEvCharging(); },
+          pos: [[-2.6, 1.7, 21.5], [-4.4, 1.5, 20.2], [-6.0, 1.4, 19.3]], look: [[-6.5, 0.95, 16.2], [-6.5, 0.95, 16.2], [-6.5, 0.95, 16.2]] },
+        // chapter 2: ground floor (each room is lit in turn by its Loxone light zone: switch on, warm to cool white, dim)
+        room('GF', [4.42, 7.96], ['Entrance', 'Video intercom, door tablet and welcome lighting'], 6, { scene: 'DUSK', prefer: -1.2, rmax: 3.2 }),
+        { n: 'Living', lf: 'GF', lc: [0.4, 5.0], exp: 0.9, dur: 10, fov: [48, 52], cap: ['Living & dining', 'Scenes, shades and multiroom audio in one touch'], floor: 'ALL',
           pos: [[0.5, 1.6, 14], [0.2, 1.6, 9.0], [0.3, 1.65, 6.3], [1.4, 1.6, 4.9]], look: [[0.5, 1.9, 6], [0.4, 1.7, 4], [table.x, 1.3, table.z], [table.x - 0.4, 1.2, table.z - 0.5]] },
         room('GF', [6.4, -0.45], ['Kitchen', 'Presence-controlled lighting and extraction'], 6, { rect: { x0: 4.66, x1: 8.2, z0: -2.32, z1: 1.8 }, cam: [7.85, 1.45] }),
         room('GF', [1.6, -3.9], ['Wet kitchen', 'Leak sensing at every sink and tap'], 6, { rect: { x0: 0.26, x1: 2.94, z0: -5.23, z1: -2.59 }, cam: [2.75, -2.75] }),
@@ -79,7 +82,7 @@ function cineShots() {
         room('F1', [5.41, -1.11], ["Kids' suite", 'Night-light scene, window sensors and presence control'], 6),
         room('F1', [7.41, -4.86], ['Ensuites & WCs', 'Motion lighting and humidity-controlled fans'], 5, { rmax: 2.2 }),
         // chapter 4: second floor
-        { n: 'Master', dur: 9, fov: [50, 50], cap: ['Master suite', 'Bed LED strip, Touch Pure Flex and control tablet'], floor: 'ALL', exp: 0.95,
+        { n: 'Master', lf: 'F2', lc: [bcx, bz], dur: 9, fov: [50, 50], cap: ['Master suite', 'Bed LED strip, Touch Pure Flex and control tablet'], floor: 'ALL', exp: 0.95,
           pos: [[bx0 - 3.2, F2y + 1.7, bz + 1.4], [bx0 - 2.1, F2y + 1.55, bz + 0.5]], look: [[bcx, F2y + 0.7, bz - 0.2], [bcx + 0.2, F2y + 0.8, bz]] },
         room('F2', [-2.03, -4.89], ['Master ensuite', 'Spa bathroom with motion lighting'], 5, { rmax: 2.2 }),
         room('F2', [6.10, -5.25], ['Walk-in closet', 'Oak fittings, shelf lighting and a window view'], 6, { rmax: 2.6 }),
@@ -198,6 +201,9 @@ function cineStart(record) {
     if (typeof xp !== 'undefined' && xp.i >= 0) stopExperienceTour(); if (walk.active) toggleWalk(false); exitCCTV(); closeTablet();
     CINE.shots = cineShots(); CINE.active = true; CINE.i = -1; CINE.barK = 0; CINE.fadeA = 0; CINE.capOn = false; CINE.caption = null;
     CINE.saved = { exp: renderer.toneMappingExposure, pos: camera.position.clone(), tgt: controls.target.clone(), fov: camera.fov, scene: currentScene, labels: roomLabelsOn, markers: markersOn, floor: currentFloor, filter: renderer.domElement.style.filter, plan: !!(planMeshes[0] && planMeshes[0].visible) };
+    // the film shows the lighting and EV charging: switch those device types on (they start unticked) and remember everything to restore
+    CINE.vt = { ...visibleTypes }; CINE.ev = { on: isEvCharging, mode: evChargeMode }; CINE.litZone = null;
+    ['spot', 'pendant', 'rgbw', 'dimmer', 'nano', 'evcharger'].forEach(t => setTypeVisible(t, true));
     if (LK.fx.valveG) LK.fx.valveG.visible = false;
     CINE.hid = { cables: LK.show, beams: PX.sec.beams }; if (typeof lkShowCables === 'function') lkShowCables(false); Object.values(LK.ctrls).forEach(k => { k.g.visible = false; }); PX.sec.beams = false; // technical overlays off for the film
     roomLabelsOn = false; markersOn = false; refreshRoomLabels(); refreshMarkers(); camAnim = null; controls.enabled = false;
@@ -216,8 +222,18 @@ function cineGo(i) {
     const s = CINE.shots[i]; CINE.i = i; CINE.t = 0;
     if (s.scene === 'RELAX_POOL') setPoolScene('relax'); else if (s.scene === 'CINEMA') { setCinemaScene('movie'); } else if (s.scene) triggerScene(s.scene);
     setFloorFilter(s.floor || 'ALL', true); if (s.exp) renderer.toneMappingExposure = s.exp; if (s.on) s.on();
+    cineRoomLight(s);
     CINE.caption = s.cap; px$('cine-cap-t').innerText = s.cap[0]; px$('cine-cap-s').innerText = s.cap[1];
     px$('cine-fade').style.opacity = 0; CINE.capOn = false; setTimeout(() => { if (CINE.i === i) { px$('cine-cap').classList.add('on'); CINE.capOn = true; } }, 1400);
+}
+/* Room lighting beat: the room being filmed is lit by its own Loxone light zone (all other zones off), so each room visibly switches on. */
+function cineRoomLight(s) {
+    const prev = CINE.litZone; CINE.litZone = null; s.zone = null;
+    if (!s.lf) { if (prev) { prev.on = false; applyZone(prev); } if (cineLightFloor) { cineLightFloor = null; refreshRoomLights(); } return; }
+    let best = null, bd = 1e9; Object.values(zones).forEach(z => { if (z.floor !== s.lf) return; const p = z.wpos || z.light.position, d = Math.hypot(p.x - s.lc[0], p.z - s.lc[1]); if (d < bd) { bd = d; best = z; } });
+    Object.values(zones).forEach(z => { z.on = false; z.autoUntil = 0; });
+    if (best) { best.on = true; best.level = 5; best.color = '#ffd29a'; CINE.litZone = s.zone = best; }
+    cineLightFloor = s.lf; refreshRoomLights(); applyAllZones();
 }
 function cineEnd() {
     px$('cine-cap').classList.remove('on'); CINE.capOn = false; px$('cine-fade').style.opacity = 1; setTimeout(cineStop, 1600);
@@ -228,6 +244,9 @@ function cineStop() {
     px$('cine-cap').classList.remove('on'); px$('cine-top').style.height = px$('cine-bot').style.height = '0'; px$('cine-fade').style.opacity = 0;
     if (LK.fx.valveG) LK.fx.valveG.visible = true;
     if (CINE.hid) { lkShowCables(CINE.hid.cables); Object.values(LK.ctrls).forEach(k => { k.g.visible = true; }); PX.sec.beams = CINE.hid.beams; CINE.hid = null; }
+    cineLightFloor = null; refreshRoomLights();
+    if (CINE.vt) { Object.keys(CINE.vt).forEach(t => setTypeVisible(t, CINE.vt[t])); CINE.vt = null; }
+    if (CINE.ev) { isEvCharging = CINE.ev.on; evChargeMode = CINE.ev.mode; updateEvChargerUI(); CINE.ev = null; }
     const S = CINE.saved; document.body.classList.remove('cine-on'); if (S && S.exp) renderer.toneMappingExposure = S.exp;
     if (S) { renderer.domElement.style.filter = S.filter || ''; roomLabelsOn = S.labels; markersOn = S.markers; refreshRoomLabels(); refreshMarkers(); triggerScene(S.scene); setFloorFilter('ALL', true);
         camera.fov = S.fov; camera.updateProjectionMatrix(); camera.position.copy(S.pos); controls.target.copy(S.tgt); if (typeof togglePlanOverlay === 'function') togglePlanOverlay(S.plan); }
@@ -240,7 +259,10 @@ function cineTick(dt, t) {
     const bk = parseFloat(px$('cine-top').style.height) > 0 ? 1 : 0; CINE.barK += (bk - CINE.barK) * Math.min(1, dt * 1.6);
     CINE.fadeA = parseFloat(getComputedStyle(px$('cine-fade')).opacity) || 0;
     const s = CINE.shots[CINE.i]; if (!s) return;
-    CINE.t += dt; const k = Math.min(1, CINE.t / s.dur), e = k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2, lin = 0.35 * k + 0.65 * e; // gentle ease, mostly continuous motion
+    CINE.t += dt; const k = Math.min(1, CINE.t / s.dur);
+    if (s.zone) { const z = s.zone; // switch on (ramp), warm to cool white, then dim
+        z.level = k < 0.15 ? 5 + 75 * (k / 0.15) : k < 0.8 ? 80 : 80 - 40 * Math.min(1, (k - 0.8) / 0.15); z.color = k < 0.5 ? '#ffd29a' : '#eef4ff'; applyZone(z); }
+    const e = k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2, lin = 0.35 * k + 0.65 * e; // gentle ease, mostly continuous motion
     camera.position.copy(s.posC.getPoint(lin)); const look = s.lookC.getPoint(lin);
     if (s.hfov) { const vis = 2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(s.hfov) / 2) / 2.39); camera.fov = THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(vis / 2) / 0.74)) + 0 * lin; camera.fov = Math.min(camera.fov, 100); } else camera.fov = s.fov[0] + (s.fov[1] - s.fov[0]) * lin; camera.updateProjectionMatrix();
     camera.lookAt(look);
