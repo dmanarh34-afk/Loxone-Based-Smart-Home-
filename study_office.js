@@ -39,7 +39,7 @@ function studyInit() {
         holder.scale.setScalar(s); holder.updateMatrixWorld(true);
         const b = kept.clone().applyMatrix4(holder.matrixWorld), ctr = b.getCenter(new THREE.Vector3());
         // against the north wall, centred left-right but nudged away from the open west side's door swing
-        holder.position.set((R.x0 + R.x1) / 2 + 0.1 - ctr.x, LEVEL.F2 + STUDY.lift - b.min.y, R.z0 + m - b.min.z);
+        holder.position.set((R.x1 - 0.12) - b.max.x, LEVEL.F2 + STUDY.lift - b.min.y, R.z0 + m - b.min.z);   // desk pushed to the east end so the bookcase (study_shelves.js) fits west of it
         floorGroups.F2.add(holder);
     }, undefined, e => console.warn('study office model failed to load', e));
 }

@@ -59,6 +59,7 @@ function masterBathInit() {
         const out = new THREE.Group(); out.name = 'master ensuite';
         const put = (it, mat, matrix) => { const m = new THREE.Mesh(it.o.geometry, mat); m.matrixAutoUpdate = false; m.matrix.copy(matrix); m.castShadow = m.receiveShadow = true; out.add(m); return m; };
         shell.forEach(it => {
+            if (it.b.min.y >= M.y1 - 6) return;   // no ceiling tiles: the bathroom is open from above so it can be seen into (ceiling light and rain head stay)
             const eastWall = it.sz.x < 10 && Math.abs(it.b.max.x - M.x1) < 12;
             put(it, eastWall ? doorMat : opaque, new THREE.Matrix4().multiplyMatrices(A, it.M));
         });

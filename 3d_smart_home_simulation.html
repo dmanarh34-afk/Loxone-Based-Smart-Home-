@@ -1121,7 +1121,7 @@ function buildBuilding() {
     slab(bPts, LEVEL.BSMT, 0.3, MAT.concrete, floorGroups.BSMT);
     planPlane('BSMT', worldPoly('BSMT', [[193,157],[1315,157],[1315,1042],[193,1042]]), LEVEL.BSMT + 0.012, floorGroups.BSMT);
     const bShell = new THREE.Group(); bShell.position.y = LEVEL.BSMT;
-    bPts.forEach((a, i) => wallSeg(bShell, a, bPts[(i + 1) % 4], 0, 3.0, MAT.concrete, 0.35));
+    bPts.forEach((a, i) => wallSeg(bShell, a, bPts[(i + 1) % 4], 0, 2.95, MAT.concrete, 0.35));
     floorGroups.BSMT.add(bShell); shells.BSMT = bShell;
 
     // ---- Ground floor (plinth slab sits on site at 0, floor at +450)
@@ -1821,7 +1821,7 @@ const INTERIOR = {
             ["sofa",200,610,310,660,"N"],
             ["sofa",140,680,195,795,"W"],
             ["roundTable",150,612,190,652],
-            ["table",343,510,400,570],
+            ["table",237,695,294,755],
             ["counter",425,670,510,700],
             ["counter",480,700,510,815]
         ]
@@ -2687,7 +2687,7 @@ function scatterGrass() {
 }
 function buildSite() {
     // lawn with the basement footprint cut out, so the basement stair is visible through its GF opening
-    const lawnGeo = new THREE.ShapeGeometry(shapeFrom([{ x: -45, z: -45 }, { x: 45, z: -45 }, { x: 45, z: 45 }, { x: -45, z: 45 }], [worldPoly('BSMT', PLAN.BSMT.poly)]));
+    const lawnGeo = new THREE.ShapeGeometry(shapeFrom([{ x: -45, z: -45 }, { x: 45, z: -45 }, { x: 45, z: 45 }, { x: -45, z: 45 }]));   // solid lawn: the old hole over the basement footprint showed the basement lounge through the grass beside the east wall
     const lawn = lawnMesh = new THREE.Mesh(lawnGeo, new THREE.MeshStandardMaterial({ map: TEX.grass, roughness: 1 }));
     TEX.grass.repeat.set(1 / 3, 1 / 3); lawn.rotation.x = -Math.PI / 2; lawn.position.y = -0.01; lawn.receiveShadow = true; siteGroup.add(lawn);
 
@@ -3045,6 +3045,8 @@ function initScene() {
     const IS_TOUCH = window.matchMedia('(pointer: coarse)').matches || window.innerWidth < 768;
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, IS_TOUCH ? 1.25 : 1.5));
     renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFShadowMap;
+    renderer.shadowMap.autoUpdate = false; renderer.shadowMap.needsUpdate = true;   // the shadow pass re-draws ~1400 casters: refreshed 10x a second from animate() instead of every frame (camera moves do not change shadows)
+    PERF.prMax = renderer.getPixelRatio(); PERF.pr = PERF.prMax;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     container.appendChild(renderer.domElement);
 
@@ -3942,10 +3944,26 @@ function onClick(e) {
    17. ANIMATION LOOP
 ===================================================================== */
 const clock = new THREE.Clock();
+// Frame-rate guard: if the machine cannot hold ~30 fps the render resolution steps down (never below 0.75x), and steps back up when there is headroom.
+const PERF = { prMax: 1, pr: 1, prMin: 0.75, last: 0, acc: 0, n: 0, hold: 0, shadowAt: 0 };
+function perfTick(now) {
+    const gap = now - PERF.last; PERF.last = now;
+    if (gap > 250 || gap <= 0 || (typeof CINE !== 'undefined' && CINE.rec)) { PERF.acc = 0; PERF.n = 0; return; }   // tab switch / load hitch / recording: not a measurement
+    PERF.acc += gap; PERF.n++;
+    if (PERF.n < 45) return;
+    const avg = PERF.acc / PERF.n; PERF.acc = 0; PERF.n = 0;
+    if (now < PERF.hold) return;
+    let pr = PERF.pr;
+    if (avg > 36 && pr > PERF.prMin) pr = Math.max(PERF.prMin, pr - 0.25);          // below ~28 fps: lower the resolution
+    else if (avg < 19 && pr < PERF.prMax) pr = Math.min(PERF.prMax, pr + 0.25);     // above ~52 fps: take it back
+    if (pr !== PERF.pr) { PERF.pr = pr; renderer.setPixelRatio(pr); PERF.hold = now + 3000; }
+}
 const UP_Y = new THREE.Vector3(0, 1, 0);
 function animate() {
     requestAnimationFrame(animate);
     const dt = Math.min(clock.getDelta(), 0.05), now = performance.now(), t = now / 1000;
+    perfTick(now);
+    if (now - PERF.shadowAt > 100) { PERF.shadowAt = now; renderer.shadowMap.needsUpdate = true; }
 
     if (camAnim) {
         camAnim.t = Math.min(1, camAnim.t + dt * 0.9); const e = camAnim.t < 0.5 ? 2 * camAnim.t * camAnim.t : 1 - Math.pow(-2 * camAnim.t + 2, 2) / 2;
@@ -4510,7 +4528,7 @@ function stopExperienceTour() {
     if (xp.saved) { roomLabelsOn = xp.saved.labels; markersOn = xp.saved.markers; xp.saved = null; xpUiSync(); refreshRoomLabels(); refreshMarkers(); }
 }
 
-window.onload = function () { initScene(); if (typeof premiumInit === 'function') premiumInit(); if (typeof closetInit === 'function') closetInit(); if (typeof poolPlantsInit === 'function') poolPlantsInit(); if (typeof extLightsInit === 'function') extLightsInit(); if (typeof diningInit === 'function') diningInit(); if (typeof kitchensInit === 'function') kitchensInit(); if (typeof gfRoomsInit === 'function') gfRoomsInit(); if (typeof studyInit === 'function') studyInit(); if (typeof suitesInit === 'function') suitesInit(); if (typeof masterBathInit === 'function') masterBathInit(); pinLights(); setInterval(pinLights, 2000); /* catches lights added by late async model loads */ };
+window.onload = function () { initScene(); if (typeof premiumInit === 'function') premiumInit(); if (typeof closetInit === 'function') closetInit(); if (typeof poolPlantsInit === 'function') poolPlantsInit(); if (typeof extLightsInit === 'function') extLightsInit(); if (typeof diningInit === 'function') diningInit(); if (typeof kitchensInit === 'function') kitchensInit(); if (typeof gfRoomsInit === 'function') gfRoomsInit(); if (typeof studyInit === 'function') studyInit(); if (typeof suitesInit === 'function') suitesInit(); if (typeof masterBathInit === 'function') masterBathInit(); if (typeof studyShelvesInit === 'function') studyShelvesInit(); pinLights(); setInterval(pinLights, 2000); /* catches lights added by late async model loads */ };
 
 // three.js recompiles every material shader whenever the number of live lights changes, and lights count only while they and all
 // their parents are visible, so hiding a floor / exterior / site group used to change the count (a freeze on floor switch).
@@ -4543,5 +4561,6 @@ function pinLights() {
 <script src="kitchens.js"></script>
 <script src="gf_rooms.js"></script>
 <script src="master_bath.js"></script>
+<script src="study_shelves.js"></script>
 <script src="estate_focus.js"></script></body>
 </html>
