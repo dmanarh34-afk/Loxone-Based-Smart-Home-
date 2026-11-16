@@ -110,7 +110,9 @@ function premiumBuild3D() {
         });
     }
     const grate = new THREE.Mesh(new THREE.PlaneGeometry(GX1 - GX0 - 0.6, 0.18), MAT.frame); grate.rotation.x = -Math.PI / 2; grate.position.set((GX0 + GX1) / 2, 0.036, GZ0 + 0.85); gs.add(grate);   // drain channel
-    addLuxuryCar(13.3, -12.7, Math.PI / 2, 0x7a1f1f, 0x7a1f1f);                      // car parked inside, seen when the door opens
+    // Tesla Model 3 (same model as the carport one) parked inside, nose to the door, seen when the door opens. Garage clear depth is 4.83 m
+    // (back wall inner face z = -14.98, door z = -10.15), so the body is set to 4.5 m long: 16 cm clear at each end; floor slab top is 5.5 cm.
+    addCarModel('tesla', 13.3, -12.56, Math.PI / 2, 0x7a1f1f, { len: 4.5, y: 0.055 });
     T.driveway = { x0: LX0, x1: LX1, z0: LZ0, z1: LZ1 };
 
     // ---- VRF / VRV outdoor unit (Modbus gateway to the Miniserver)

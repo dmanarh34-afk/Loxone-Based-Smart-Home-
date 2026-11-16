@@ -281,9 +281,9 @@ function chainPath(runLists) { // runLists: arrays of consecutive runs; each is 
 function drawCable(c) {
     const cyl = new THREE.CylinderGeometry(1, 1, 1, 6, 1), segs = []; for (let i = 1; i < c.pts.length; i++) if (c.pts[i].distanceTo(c.pts[i - 1]) > 0.02) segs.push([c.pts[i - 1], c.pts[i]]);
     c.mat = new THREE.MeshBasicMaterial({ color: 0xffffff }); const m = new THREE.InstancedMesh(cyl, c.mat, segs.length); c.base = new THREE.Color(0xe879f9);
-    segs.forEach(([a, b], i) => { const d = b.clone().sub(a), l = d.length(); tmpQ.setFromUnitVectors(UPY, d.normalize()); tmpM.compose(a.clone().add(b).multiplyScalar(0.5), tmpQ, V3(0.05, l, 0.05)); m.setMatrixAt(i, tmpM); m.setColorAt(i, c.base); });
+    segs.forEach(([a, b], i) => { const d = b.clone().sub(a), l = d.length(); tmpQ.setFromUnitVectors(UPY, d.normalize()); tmpM.compose(a.clone().add(b).multiplyScalar(0.5), tmpQ, V3(0.02, l, 0.02)); m.setMatrixAt(i, tmpM); m.setColorAt(i, c.base); });
     m.instanceColor.needsUpdate = true; m.frustumCulled = false; c.inst = m; c.nseg = segs.length; c.group.add(m);
-    for (let d = 10; d < c.len; d += 10) { const p = cablePoint(c, d), t = new THREE.Mesh(new THREE.SphereGeometry(0.07, 6, 5), new THREE.MeshBasicMaterial({ color: 0xffffff })); t.position.copy(p); c.group.add(t); if (d % 20 === 0) { const l = label(d + ' m', 0.5, 0.2, 'rgba(15,23,42,.8)', '#5eead4'); l.position.set(p.x, p.y + 0.3, p.z); c.group.add(l); } }
+    for (let d = 10; d < c.len; d += 10) { const p = cablePoint(c, d), t = new THREE.Mesh(new THREE.SphereGeometry(0.04, 6, 5), new THREE.MeshBasicMaterial({ color: 0xffffff })); t.position.copy(p); c.group.add(t); if (d % 20 === 0) { const l = label(d + ' m', 0.5, 0.2, 'rgba(15,23,42,.8)', '#5eead4'); l.position.set(p.x, p.y + 0.3, p.z); c.group.add(l); } }
 }
 function tintCable(c, hex) { const col = new THREE.Color(hex); for (let i = 0; i < c.nseg; i++) c.inst.setColorAt(i, col); c.inst.instanceColor.needsUpdate = true; }
 function buildCables() {

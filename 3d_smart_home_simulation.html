@@ -1808,7 +1808,7 @@ const INTERIOR = {
         ]
     },
     F2: {
-        walls: [[21,17,135,10],[415,17,255,10],[408,24,7,98],[14,25,7,23],[156,25,9,65],[670,25,6,247],[667,27,3,245],[609,28,10,31],[0,46,14,20],[619,57,48,5],[15,61,8,31],[71,89,84,10],[163,121,81,9],[251,121,157,9],[155,129,8,69],[243,172,9,26],[70,197,85,10],[164,197,79,10],[15,206,8,45],[312,206,9,67],[322,269,275,11],[597,271,29,9],[633,271,34,9],[311,277,9,60],[626,279,7,27],[668,279,8,203],[633,280,3,26],[14,356,9,57],[311,372,10,75],[625,421,11,39],[13,431,43,10],[56,440,7,145],[53,441,3,144],[321,445,24,9],[311,452,9,66],[636,452,28,8],[403,453,11,31],[625,460,9,22],[414,480,209,11],[634,481,33,10],[597,496,10,351],[63,574,70,10],[141,576,109,9],[267,576,47,9],[132,584,9,242],[423,660,101,10],[512,671,12,73],[377,721,16,14],[512,744,11,73],[549,808,42,11],[479,815,33,11],[272,816,207,10],[523,816,26,10],[570,819,21,7],[11,824,9,23],[299,826,7,21]],
+        walls: [[21,17,135,10],[415,17,255,10],[408,24,7,98],[14,25,7,23],[156,25,9,65],[670,25,6,247],[667,27,3,245],[609,28,10,31],[0,46,14,20],[619,57,48,5],[15,61,8,31],[163,121,81,9],[251,121,157,9],[155,129,8,69],[243,172,9,26],[70,197,85,10],[164,197,79,10],[15,206,8,45],[312,206,9,67],[322,269,275,11],[597,271,29,9],[633,271,34,9],[311,277,9,60],[626,279,7,27],[668,279,8,203],[633,280,3,26],[14,356,9,57],[311,372,10,75],[625,421,11,39],[13,431,43,10],[56,440,7,145],[53,441,3,144],[321,445,24,9],[311,452,9,66],[636,452,28,8],[403,453,11,31],[625,460,9,22],[414,480,209,11],[634,481,33,10],[597,496,10,351],[63,574,70,10],[141,576,109,9],[267,576,47,9],[132,584,9,242],[423,660,101,10],[512,671,12,73],[377,721,16,14],[512,744,11,73],[549,808,42,11],[479,815,33,11],[272,816,207,10],[523,816,26,10],[570,819,21,7],[11,824,9,23],[299,826,7,21]],
         furniture: [
             ["bed",183,305,310,415,"E"],
             ["night",283,262,306,300],
@@ -1816,8 +1816,6 @@ const INTERIOR = {
             ["console",157,333,183,375],
             ["armchair",105,495,165,550,"S"],
             ["roundTable",80,480,110,510],
-            ["toilet",115,45,155,68,"E"],
-            ["shower",92,100,155,195,"W"],
             ["wardrobe",635,280,665,480],
             ["wardrobe",410,445,625,480],
             ["sofa",200,610,310,660,"N"],
@@ -2569,15 +2567,15 @@ function loadCarModels() {
     }, undefined, e => { M.failed = true; M.jobs.length = 0; console.warn(name + ' model failed to load', e); }));
 }
 // parked car model at (x, z); rot = yaw, same convention as addLuxuryCar's rot
-function addCarModel(name, x, z, rot, paintHex) {
+function addCarModel(name, x, z, rot, paintHex, opt = {}) {   // opt.len = body length override (m), opt.y = floor height
     const M = CAR_MODELS[name], n0 = siteGroup.children.length;
     addLuxuryCar(x, z, rot, paintHex, paintHex);
     const parts = siteGroup.children.slice(n0);
     const job = () => {
         parts.forEach(p => p.parent && p.parent.remove(p));
-        const L = Math.max(M.size.x, M.size.z), k = M.length / L, holder = new THREE.Group(), m = M.root.clone(true);
+        const L = Math.max(M.size.x, M.size.z), k = (opt.len || M.length) / L, holder = new THREE.Group(), m = M.root.clone(true);
         m.position.set(-M.base.x, -M.base.y, -M.base.z); holder.add(m);
-        holder.scale.setScalar(k); holder.rotation.y = rot + (M.size.x >= M.size.z ? 0 : -Math.PI / 2) + M.flip * Math.PI; holder.position.set(x, 0, z); siteGroup.add(holder);
+        holder.scale.setScalar(k); holder.rotation.y = rot + (M.size.x >= M.size.z ? 0 : -Math.PI / 2) + M.flip * Math.PI; holder.position.set(x, opt.y || 0, z); siteGroup.add(holder);
     };
     if (M.root) job(); else if (!M.failed) M.jobs.push(job);
 }
@@ -4512,7 +4510,7 @@ function stopExperienceTour() {
     if (xp.saved) { roomLabelsOn = xp.saved.labels; markersOn = xp.saved.markers; xp.saved = null; xpUiSync(); refreshRoomLabels(); refreshMarkers(); }
 }
 
-window.onload = function () { initScene(); if (typeof premiumInit === 'function') premiumInit(); if (typeof closetInit === 'function') closetInit(); if (typeof poolPlantsInit === 'function') poolPlantsInit(); if (typeof extLightsInit === 'function') extLightsInit(); if (typeof diningInit === 'function') diningInit(); if (typeof kitchensInit === 'function') kitchensInit(); if (typeof gfRoomsInit === 'function') gfRoomsInit(); if (typeof studyInit === 'function') studyInit(); if (typeof suitesInit === 'function') suitesInit(); pinLights(); setInterval(pinLights, 2000); /* catches lights added by late async model loads */ };
+window.onload = function () { initScene(); if (typeof premiumInit === 'function') premiumInit(); if (typeof closetInit === 'function') closetInit(); if (typeof poolPlantsInit === 'function') poolPlantsInit(); if (typeof extLightsInit === 'function') extLightsInit(); if (typeof diningInit === 'function') diningInit(); if (typeof kitchensInit === 'function') kitchensInit(); if (typeof gfRoomsInit === 'function') gfRoomsInit(); if (typeof studyInit === 'function') studyInit(); if (typeof suitesInit === 'function') suitesInit(); if (typeof masterBathInit === 'function') masterBathInit(); pinLights(); setInterval(pinLights, 2000); /* catches lights added by late async model loads */ };
 
 // three.js recompiles every material shader whenever the number of live lights changes, and lights count only while they and all
 // their parents are visible, so hiding a floor / exterior / site group used to change the count (a freeze on floor switch).
@@ -4544,5 +4542,6 @@ function pinLights() {
 <script src="dining_room.js"></script>
 <script src="kitchens.js"></script>
 <script src="gf_rooms.js"></script>
+<script src="master_bath.js"></script>
 <script src="estate_focus.js"></script></body>
 </html>

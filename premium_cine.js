@@ -84,7 +84,7 @@ function cineShots() {
         // chapter 4: second floor
         { n: 'Master', lf: 'F2', lc: [bcx, bz], dur: 9, fov: [50, 50], cap: ['Master suite', 'Bed LED strip, Touch Pure Flex and control tablet'], floor: 'ALL', exp: 0.95,
           pos: [[bx0 - 3.2, F2y + 1.7, bz + 1.4], [bx0 - 2.1, F2y + 1.55, bz + 0.5]], look: [[bcx, F2y + 0.7, bz - 0.2], [bcx + 0.2, F2y + 0.8, bz]] },
-        room('F2', [-2.03, -4.89], ['Master ensuite', 'Spa bathroom with motion lighting'], 5, { rmax: 2.2 }),
+        room('F2', [-1.52, -5.57], ['Master ensuite', 'Spa bathroom with motion lighting'], 7, { rect: { x0: -2.72, x1: -0.33, z0: -7.09, z1: -4.05 }, cam: [-2.2, -4.22], eye: 1.7, ly: 1.1, maxFov: 100 }),
         room('F2', [6.10, -5.25], ['Walk-in closet', 'Oak fittings, shelf lighting and a window view'], 6, { rmax: 2.6 }),
         room('F2', [6.2, -1.1], ['Study', 'Task lighting and air-quality-aware ventilation'], 6, { prefer: Math.PI / 2 }),
         room('F2', [2.6, 5.2], ['Second-floor lounge & kitchenette', 'A relaxed upper living space with scenes at a tap'], 7, { maxW: 3.6, maxD: 3.4 }),
@@ -233,27 +233,30 @@ const CVID = { el: null, cv: null, ctx: null, tex: null, saved: null };
 function cineVideoDraw() {
     const V = CVID, v = V.el; if (!v || !V.ctx) return; const w = V.cv.width, h = V.cv.height, g = V.ctx;
     g.fillStyle = '#000'; g.fillRect(0, 0, w, h);
-    if (v.videoWidth) { const r = v.videoWidth / v.videoHeight, dw = Math.min(w, h * r), dh = dw / r; g.drawImage(v, (w - dw) / 2, (h - dh) / 2, dw, dh); }
+    if (v.videoWidth) { // "cover": scale until the clip fills the whole screen, centre-cropping what overflows
+        const r = v.videoWidth / v.videoHeight, dw = Math.max(w, h * r), dh = dw / r; g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high';
+        g.filter = 'brightness(1.3) contrast(1.06) saturate(1.1)'; g.drawImage(v, (w - dw) / 2, (h - dh) / 2, dw, dh); g.filter = 'none'; }
     V.tex.needsUpdate = true;
 }
 function cineVideoBegin(s) {
     cineVideoEnd(); if (!s.video) return;
     const v = document.createElement('video'); v.src = s.video; v.playsInline = true; v.preload = 'auto'; v.muted = !!(CINE.music && CINE.music.muted);
-    const cv = document.createElement('canvas'); cv.width = 1024; cv.height = Math.round(1024 * CINEMA.screenH / CINEMA.scopeW);
-    const V = CVID; V.el = v; V.cv = cv; V.ctx = cv.getContext('2d'); V.tex = new THREE.CanvasTexture(cv); V.tex.encoding = cin.tex.encoding; V.tex.colorSpace = cin.tex.colorSpace;
+    const cv = document.createElement('canvas'); cv.width = 2048; cv.height = Math.round(2048 * CINEMA.screenH / CINEMA.scopeW);
+    const V = CVID; V.el = v; V.cv = cv; V.ctx = cv.getContext('2d'); V.tex = new THREE.CanvasTexture(cv); V.tex.generateMipmaps = false; V.tex.minFilter = THREE.LinearFilter; V.tex.anisotropy = renderer.capabilities.getMaxAnisotropy(); V.tex.encoding = cin.tex.encoding; V.tex.colorSpace = cin.tex.colorSpace;
     V.saved = { map: cin.screenMat.emissiveMap, aspect: cinema.aspect, muted: cinema.muted };
     s.vstarted = false; s.vend = false; s.vfail = false; s.dur = Math.max(s.dur, 10);
-    v.onloadedmetadata = () => { s.dur = 1.2 + v.duration + 2; if (Math.abs(v.videoWidth / v.videoHeight - 16 / 9) < 0.12) setCinemaAspect('flat'); };
+    v.onloadedmetadata = () => { s.dur = 1.2 + v.duration + 2; };
     v.onended = () => { cineVideoDraw(); s.vend = true; s.dur = Math.max(s.dur, CINE.t + 2); };   // wait 2 s after the last frame, then move on
     v.onerror = () => { s.vfail = true; };
     cinema.muted = true;   // the cinema's synthesised score would fight the clip's own sound
-    cineVideoDraw(); cin.screenMat.emissiveMap = V.tex; cin.screenMat.needsUpdate = true;
+    if (cinema.aspect !== 'scope') setCinemaAspect('scope');   // full-width screen, masking fully open
+    cineVideoDraw(); cin.screenMat.emissiveMap = V.tex; cin.screenMat.emissiveIntensity = 1.8; cin.screenMat.needsUpdate = true;   // brighter than the stock projector image
     v.load();
 }
 function cineVideoEnd() {
     const V = CVID; if (!V.el) return;
     try { V.el.pause(); V.el.removeAttribute('src'); V.el.load(); } catch (e) {}
-    if (V.saved) { cin.screenMat.emissiveMap = V.saved.map; cin.screenMat.needsUpdate = true; cinema.muted = V.saved.muted; if (V.saved.aspect !== cinema.aspect) setCinemaAspect(V.saved.aspect); }
+    if (V.saved) { cin.screenMat.emissiveMap = V.saved.map; cin.screenMat.emissiveIntensity = cinema.projector ? 1 : 0; cin.screenMat.needsUpdate = true; cinema.muted = V.saved.muted; if (V.saved.aspect !== cinema.aspect) setCinemaAspect(V.saved.aspect); }
     if (V.tex) V.tex.dispose();
     const M = CINE.music; if (M && !M.muted) { try { M.master.gain.setTargetAtTime(0.5, M.c.currentTime, 0.5); } catch (e) {} }
     V.el = V.cv = V.ctx = V.tex = V.saved = null;
