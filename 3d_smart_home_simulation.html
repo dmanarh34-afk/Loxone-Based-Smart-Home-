@@ -3096,6 +3096,11 @@ function initScene() {
     // start with every device type unticked (legend + 3D); the cinematic tour switches the lighting / EV ones back on while it plays
     TYPE_ORDER.forEach(t => setTypeVisible(t, false));
     document.querySelectorAll('#legend-body input[type=checkbox]').forEach(c => { c.checked = false; });
+    // right-hand controls start unticked as well: light zones, exterior lights, pool master, markers, room labels, plan overlay
+    setAllZonesOn(false); setExteriorLights(false); document.getElementById('ext-toggle').checked = false; setPoolMaster(false);
+    ['markers-toggle', 'labels-toggle'].forEach(id => { document.getElementById(id).checked = false; });
+    markersOn = false; roomLabelsOn = false; refreshMarkers(); refreshRoomLabels();
+    const plan = document.querySelector('#right-panel input[onchange^="togglePlanOverlay"]'); if (plan) { plan.checked = false; togglePlanOverlay(false); }
     camera.position.set(-9, 3.4, 23.3); controls.target.set(1, 5, 5); controls.update();
     animate();
 }

@@ -203,6 +203,7 @@ function cineStart(record) {
     CINE.saved = { exp: renderer.toneMappingExposure, pos: camera.position.clone(), tgt: controls.target.clone(), fov: camera.fov, scene: currentScene, labels: roomLabelsOn, markers: markersOn, floor: currentFloor, filter: renderer.domElement.style.filter, plan: !!(planMeshes[0] && planMeshes[0].visible) };
     // the film shows the lighting and EV charging: switch those device types on (they start unticked) and remember everything to restore
     CINE.vt = { ...visibleTypes }; CINE.ev = { on: isEvCharging, mode: evChargeMode }; CINE.litZone = null;
+    CINE.zs = Object.values(zones).map(z => [z, z.on, z.level, z.color]); CINE.ext = extOn; CINE.pm = pool.master; setExteriorLights(true);
     ['spot', 'pendant', 'rgbw', 'dimmer', 'nano', 'evcharger'].forEach(t => setTypeVisible(t, true));
     if (LK.fx.valveG) LK.fx.valveG.visible = false;
     CINE.hid = { cables: LK.show, beams: PX.sec.beams }; if (typeof lkShowCables === 'function') lkShowCables(false); Object.values(LK.ctrls).forEach(k => { k.g.visible = false; }); PX.sec.beams = false; // technical overlays off for the film
@@ -227,6 +228,7 @@ function cineGo(i) {
     px$('cine-fade').style.opacity = 0; CINE.capOn = false; setTimeout(() => { if (CINE.i === i) { px$('cine-cap').classList.add('on'); CINE.capOn = true; } }, 1400);
 }
 /* Room lighting beat: the room being filmed is lit by its own Loxone light zone (all other zones off), so each room visibly switches on. */
+const CINE_LIGHT_SEQ = [[0, false, 5, '#ffd29a'], [0.08, true, 80, '#ffd29a'], [0.28, false, 80, '#ffd29a'], [0.36, true, 80, '#eef4ff'], [0.5, true, 80, '#3b82f6'], [0.64, true, 75, '#a855f7'], [0.78, true, 80, '#22c55e'], [0.9, true, 60, '#ffd29a']];
 function cineRoomLight(s) {
     const prev = CINE.litZone; CINE.litZone = null; s.zone = null;
     if (!s.lf) { if (prev) { prev.on = false; applyZone(prev); } if (cineLightFloor) { cineLightFloor = null; refreshRoomLights(); } return; }
@@ -250,6 +252,7 @@ function cineStop() {
     const S = CINE.saved; document.body.classList.remove('cine-on'); if (S && S.exp) renderer.toneMappingExposure = S.exp;
     if (S) { renderer.domElement.style.filter = S.filter || ''; roomLabelsOn = S.labels; markersOn = S.markers; refreshRoomLabels(); refreshMarkers(); triggerScene(S.scene); setFloorFilter('ALL', true);
         camera.fov = S.fov; camera.updateProjectionMatrix(); camera.position.copy(S.pos); controls.target.copy(S.tgt); if (typeof togglePlanOverlay === 'function') togglePlanOverlay(S.plan); }
+    if (CINE.zs) { CINE.zs.forEach(([z, on, lv, col]) => { z.on = on; z.level = lv; z.color = col; }); applyAllZones(); syncZoneUI(); CINE.zs = null; setExteriorLights(CINE.ext); px$('ext-toggle').checked = CINE.ext; setPoolMaster(CINE.pm); updatePoolUI(); }
     controls.enabled = true; controls.update(); CINE.saved = null;
 }
 
@@ -260,8 +263,8 @@ function cineTick(dt, t) {
     CINE.fadeA = parseFloat(getComputedStyle(px$('cine-fade')).opacity) || 0;
     const s = CINE.shots[CINE.i]; if (!s) return;
     CINE.t += dt; const k = Math.min(1, CINE.t / s.dur);
-    if (s.zone) { const z = s.zone; // switch on (ramp), warm to cool white, then dim
-        z.level = k < 0.15 ? 5 + 75 * (k / 0.15) : k < 0.8 ? 80 : 80 - 40 * Math.min(1, (k - 0.8) / 0.15); z.color = k < 0.5 ? '#ffd29a' : '#eef4ff'; applyZone(z); }
+    if (s.zone) { const z = s.zone; // light show per room: on, off, cool white, then a few RGBW colour changes, settling on warm white
+        let f = CINE_LIGHT_SEQ[0]; CINE_LIGHT_SEQ.forEach(q => { if (k >= q[0]) f = q; }); z.on = f[1]; z.level = f[2]; z.color = f[3]; z.autoUntil = 0; applyZone(z); }
     const e = k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2, lin = 0.35 * k + 0.65 * e; // gentle ease, mostly continuous motion
     camera.position.copy(s.posC.getPoint(lin)); const look = s.lookC.getPoint(lin);
     if (s.hfov) { const vis = 2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(s.hfov) / 2) / 2.39); camera.fov = THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(vis / 2) / 0.74)) + 0 * lin; camera.fov = Math.min(camera.fov, 100); } else camera.fov = s.fov[0] + (s.fov[1] - s.fov[0]) * lin; camera.updateProjectionMatrix();
