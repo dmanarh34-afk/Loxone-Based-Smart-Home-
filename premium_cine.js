@@ -91,7 +91,7 @@ function cineShots() {
         { n: 'Roof', dur: 7, fov: [38, 32], cap: ['Solar array & polytanks', '15 panels, 500 L tanks and live energy monitoring'], floor: 'ALL', exp: 1.0, scene: 'DUSK',
           pos: [[12.5, 13.6, 7.5], [8.5, 12.6, 3.0], [4.5, 12.0, 2.6]], look: [[4, 10.9, -2.6], [4, 10.9, -3.0], [2.4, 11.2, -5.4]] },
         // chapter 5: basement
-        { n: 'Cinema', dur: 10, fov: [42, 38], cap: ['Basement cinema', '8 recliners, projector, curtains and lighting scenes'], scene: 'CINEMA', floor: 'BSMT', exp: 1.0,
+        { n: 'Cinema', dur: 10, fov: [42, 38], cap: ['Basement cinema', '8 recliners, projector, curtains and lighting scenes'], scene: 'CINEMA', video: 'video/IBS_Brand_Clip.mp4', floor: 'BSMT', exp: 1.0,
           pos: [[6.9, -0.7, 0.4], [6.3, -0.8, 0.9], [5.2, -0.9, 1.6]], look: [[-1.5, -1.6, 1.8], [-1.6, -1.6, 1.8], [-1.6, -1.5, 1.8]] },
         room('BSMT', [0.1, 0.25], ['Basement bar', 'Lit bottle shelves and a waterfall counter'], 6, { floor: 'BSMT', rmax: 3.0 }),
         room('BSMT', [5.65, 0.15], ['Basement lounge', 'Curved sofas and sconces that follow the cinema scenes'], 6, { floor: 'BSMT', rmax: 3.2 }),
@@ -223,10 +223,54 @@ function cineGo(i) {
     const s = CINE.shots[i]; CINE.i = i; CINE.t = 0;
     if (s.scene === 'RELAX_POOL') setPoolScene('relax'); else if (s.scene === 'CINEMA') { setCinemaScene('movie'); } else if (s.scene) triggerScene(s.scene);
     setFloorFilter(s.floor || 'ALL', true); if (s.exp) renderer.toneMappingExposure = s.exp; if (s.on) s.on();
-    cineRoomLight(s);
+    cineRoomLight(s); cineVideoBegin(s);
     CINE.caption = s.cap; px$('cine-cap-t').innerText = s.cap[0]; px$('cine-cap-s').innerText = s.cap[1];
     px$('cine-fade').style.opacity = 0; CINE.capOn = false; setTimeout(() => { if (CINE.i === i) { px$('cine-cap').classList.add('on'); CINE.capOn = true; } }, 1400);
 }
+/* ---- basement screen plays video/IBS_Brand_Clip.mp4: the shot stays until the clip has finished, then holds 2 s before the next shot.
+   The clip is drawn (letterboxed) into its own canvas texture that replaces the cinema screen's emissive map while it plays. */
+const CVID = { el: null, cv: null, ctx: null, tex: null, saved: null };
+function cineVideoDraw() {
+    const V = CVID, v = V.el; if (!v || !V.ctx) return; const w = V.cv.width, h = V.cv.height, g = V.ctx;
+    g.fillStyle = '#000'; g.fillRect(0, 0, w, h);
+    if (v.videoWidth) { const r = v.videoWidth / v.videoHeight, dw = Math.min(w, h * r), dh = dw / r; g.drawImage(v, (w - dw) / 2, (h - dh) / 2, dw, dh); }
+    V.tex.needsUpdate = true;
+}
+function cineVideoBegin(s) {
+    cineVideoEnd(); if (!s.video) return;
+    const v = document.createElement('video'); v.src = s.video; v.playsInline = true; v.preload = 'auto'; v.muted = !!(CINE.music && CINE.music.muted);
+    const cv = document.createElement('canvas'); cv.width = 1024; cv.height = Math.round(1024 * CINEMA.screenH / CINEMA.scopeW);
+    const V = CVID; V.el = v; V.cv = cv; V.ctx = cv.getContext('2d'); V.tex = new THREE.CanvasTexture(cv); V.tex.encoding = cin.tex.encoding; V.tex.colorSpace = cin.tex.colorSpace;
+    V.saved = { map: cin.screenMat.emissiveMap, aspect: cinema.aspect, muted: cinema.muted };
+    s.vstarted = false; s.vend = false; s.vfail = false; s.dur = Math.max(s.dur, 10);
+    v.onloadedmetadata = () => { s.dur = 1.2 + v.duration + 2; if (Math.abs(v.videoWidth / v.videoHeight - 16 / 9) < 0.12) setCinemaAspect('flat'); };
+    v.onended = () => { cineVideoDraw(); s.vend = true; s.dur = Math.max(s.dur, CINE.t + 2); };   // wait 2 s after the last frame, then move on
+    v.onerror = () => { s.vfail = true; };
+    cinema.muted = true;   // the cinema's synthesised score would fight the clip's own sound
+    cineVideoDraw(); cin.screenMat.emissiveMap = V.tex; cin.screenMat.needsUpdate = true;
+    v.load();
+}
+function cineVideoEnd() {
+    const V = CVID; if (!V.el) return;
+    try { V.el.pause(); V.el.removeAttribute('src'); V.el.load(); } catch (e) {}
+    if (V.saved) { cin.screenMat.emissiveMap = V.saved.map; cin.screenMat.needsUpdate = true; cinema.muted = V.saved.muted; if (V.saved.aspect !== cinema.aspect) setCinemaAspect(V.saved.aspect); }
+    if (V.tex) V.tex.dispose();
+    const M = CINE.music; if (M && !M.muted) { try { M.master.gain.setTargetAtTime(0.5, M.c.currentTime, 0.5); } catch (e) {} }
+    V.el = V.cv = V.ctx = V.tex = V.saved = null;
+}
+function cineVideoTick(s, dt) {
+    const V = CVID, v = V.el; if (!v) return;
+    if (!s.vstarted && CINE.t >= 1.2 && v.readyState >= 2) {
+        s.vstarted = true; s.vt0 = CINE.t;
+        const M = CINE.music; if (M && !M.muted) { try { M.master.gain.setTargetAtTime(0.04, M.c.currentTime, 0.4); } catch (e) {} }   // duck the tour score under the clip's sound
+        v.play().catch(() => { v.muted = true; v.play().catch(() => { s.vfail = true; }); });
+    }
+    if (s.vstarted && !s.vend && !s.vfail) { cineVideoDraw(); if (CINE.t - s.vt0 > 6 && v.currentTime === 0) s.vfail = true; }
+    if (!s.vstarted && CINE.t > 12) s.vfail = true;   // clip never became ready
+    if (s.vfail && !s.vend) { s.vend = true; s.dur = Math.max(s.dur, CINE.t + 2); }
+    if (!s.vend && CINE.t + dt > s.dur - 1.0) CINE.t = s.dur - 1.0 - dt;   // hold the shot until the clip has finished
+}
+
 /* Room lighting beat: the room being filmed is lit by its own Loxone light zone (all other zones off), so each room visibly switches on. */
 const CINE_LIGHT_SEQ = [[0, false, 5, '#ffd29a'], [0.08, true, 80, '#ffd29a'], [0.28, false, 80, '#ffd29a'], [0.36, true, 80, '#eef4ff'], [0.5, true, 80, '#3b82f6'], [0.64, true, 75, '#a855f7'], [0.78, true, 80, '#22c55e'], [0.9, true, 60, '#ffd29a']];
 function cineRoomLight(s) {
@@ -246,7 +290,7 @@ function cineStop() {
     px$('cine-cap').classList.remove('on'); px$('cine-top').style.height = px$('cine-bot').style.height = '0'; px$('cine-fade').style.opacity = 0;
     if (LK.fx.valveG) LK.fx.valveG.visible = true;
     if (CINE.hid) { lkShowCables(CINE.hid.cables); Object.values(LK.ctrls).forEach(k => { k.g.visible = true; }); PX.sec.beams = CINE.hid.beams; CINE.hid = null; }
-    cineLightFloor = null; refreshRoomLights();
+    cineVideoEnd(); cineLightFloor = null; refreshRoomLights();
     if (CINE.vt) { Object.keys(CINE.vt).forEach(t => setTypeVisible(t, CINE.vt[t])); CINE.vt = null; }
     if (CINE.ev) { isEvCharging = CINE.ev.on; evChargeMode = CINE.ev.mode; updateEvChargerUI(); CINE.ev = null; }
     const S = CINE.saved; document.body.classList.remove('cine-on'); if (S && S.exp) renderer.toneMappingExposure = S.exp;
@@ -262,6 +306,7 @@ function cineTick(dt, t) {
     const bk = parseFloat(px$('cine-top').style.height) > 0 ? 1 : 0; CINE.barK += (bk - CINE.barK) * Math.min(1, dt * 1.6);
     CINE.fadeA = parseFloat(getComputedStyle(px$('cine-fade')).opacity) || 0;
     const s = CINE.shots[CINE.i]; if (!s) return;
+    if (s.video) cineVideoTick(s, dt);
     CINE.t += dt; const k = Math.min(1, CINE.t / s.dur);
     if (s.zone) { const z = s.zone; // light show per room: on, off, cool white, then a few RGBW colour changes, settling on warm white
         let f = CINE_LIGHT_SEQ[0]; CINE_LIGHT_SEQ.forEach(q => { if (k >= q[0]) f = q; }); z.on = f[1]; z.level = f[2]; z.color = f[3]; z.autoUntil = 0; applyZone(z); }
