@@ -177,9 +177,9 @@ function cineRecStart() {
     try {
         const src = renderer.domElement, cw = Math.min(1920, src.width), ch = Math.round(cw * src.height / src.width);
         const comp = document.createElement('canvas'); comp.width = cw; comp.height = ch; CINE.comp = comp;
-        const stream = comp.captureStream(30); if (CINE.music && CINE.music.c.state === 'running') CINE.music.dest.stream.getAudioTracks().forEach(t => stream.addTrack(t)); // a suspended audio context would stall the muxer
+        const stream = comp.captureStream(60); if (CINE.music && CINE.music.c.state === 'running') CINE.music.dest.stream.getAudioTracks().forEach(t => stream.addTrack(t)); // a suspended audio context would stall the muxer
         const hasA = stream.getAudioTracks().length > 0, mime = [hasA ? 'video/webm;codecs=vp9,opus' : 'video/webm;codecs=vp9', hasA ? 'video/webm;codecs=vp8,opus' : 'video/webm;codecs=vp8', 'video/webm'].find(m => MediaRecorder.isTypeSupported(m));
-        const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 8e6 }), chunks = []; rec.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
+        const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 16e6 }), chunks = []; rec.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
         rec.onstop = () => { CINE.recBlob = new Blob(chunks, { type: 'video/webm' }); const s = px$('cine-save'); if (s) s.classList.remove('hidden'); };
         rec.start(1000); CINE.rec = rec; px$('cine-rec').style.display = 'block';
     } catch (e) { CINE.rec = null; console.warn('Recording unavailable', e); }
