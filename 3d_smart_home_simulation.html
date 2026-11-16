@@ -1901,7 +1901,7 @@ function loadLivingRoom() {
                     (n === 15 && c.z > 4.5 && c.x < -11.5) || (n === 17 && c.x > 4.5 && c.z > 9.5) ||
                     (n === 16 && c.x > 9.5 && c.z > -8 && c.z < 2); // 16: dark bench on the west side
                 if (!ok || gone) continue;
-                if (n === 14 && c.x > -6.6 && c.z < -9.35 && !(c.x < -6.2 && c.z > -10.05 && c.y < 3.3)) sofaIdx.push(I[t], I[t + 1], I[t + 2]); // the grey sofa, re-placed below
+                if (n === 14 && c.x < 12 && c.z < -9.0) sofaIdx.push(I[t], I[t + 1], I[t + 2]); // the grey sofa (whole piece incl. both arms: the old x > -6.6 cut left the west arm behind as a loose block), re-placed below
                 else keep.push(I[t], I[t + 1], I[t + 2]);
             }
             o.geometry.setIndex(keep);
