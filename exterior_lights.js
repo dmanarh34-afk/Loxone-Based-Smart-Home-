@@ -5,10 +5,17 @@
    "All lights on / off", exactly like the interior lights:
      ext-wall     Forecourt lamp posts   two bright lamp posts in front of the building (no lights are mounted on the walls)
      ext-garden   Garden uplights   ground uplights under the trees and palms (no fixtures are mounted on the building walls)
+   ext-boundary Boundary wall lights   shielded lamps on top of the compound wall, one every 4 m. Emissive fixtures only: no light source, no
+                glow cone, so nothing spreads into the compound; the wall lights are seen, they do not light the garden.
+   ext-roofline Roofline LED strip   RGBW LED strip round the building, on the outer face of the roof parapet ROOFLINE.drop below its top edge.
+                Emissive only (no light source), cycles colour in the Party scene like the other RGBW strips.
+   ext-glass    Glass facade LED strip   RGBW LED strip along the head of every glass front (ground, first and second floor, incl. the double-height
+                glass box), on the outer face of the grey band above the glass. Emissive only.
    Light output follows the zone level and colour; the real light sources are only strong when the sky is dark (dusk / night), as a
    Loxone astro / brightness input would do. Loaded after the main script; entry point extLightsInit() (window.onload).
 ===================================================================== */
 const EXTL = { zones: {}, built: false };
+const ROOFLINE = { drop: 0.30 };   // metres below the top edge of the roof parapet (30 cm)
 
 function extLightsInit() {
     if (EXTL.built || typeof zones === 'undefined' || !floorGroups.GF) return; EXTL.built = true;
@@ -23,7 +30,7 @@ function extLightsInit() {
         };
         zones[id] = z; EXTL.zones[id] = z; return z;
     };
-    const Z = { wall: mkZone('ext-wall', 'Forecourt lamp posts', 'RGBW lamp posts · Dimmer Tree'), garden: mkZone('ext-garden', 'Garden uplights', 'RGBW ground uplights · DMX') };
+    const Z = { wall: mkZone('ext-wall', 'Forecourt lamp posts', 'RGBW lamp posts · Dimmer Tree'), garden: mkZone('ext-garden', 'Garden uplights', 'RGBW ground uplights · DMX'), boundary: mkZone('ext-boundary', 'Boundary wall lights', 'RGBW wall-top lights · shielded, no spill'), roof: mkZone('ext-roofline', 'Roofline LED strip', 'RGBW LED strip · DMX'), glass: mkZone('ext-glass', 'Glass facade LED strip', 'RGBW LED strip · DMX') };
     Z.wall.level = 100; Z.wall.gain = 0.14;
     const housing = new THREE.MeshStandardMaterial({ color: 0x1b1f27, roughness: 0.5, metalness: 0.6 });
     const light = (z, kind, x, y, z0, base, tx, ty, tz) => {
@@ -54,6 +61,50 @@ function extLightsInit() {
         if (real) light(Z.garden, 'spot', x + dx, 0.3, zz + 0.5, 6, x, 4.2, zz);
     });
 
+    // ---- boundary wall lights: shielded lamps on top of the compound wall (wall: x -20..20, z -16..24, 2.2 m high, 0.3 m thick, gate gap x 2..10 in front).
+    //      Three instanced meshes (plinth, glowing band, hood) = 3 draw calls for all of them. The band uses the zone's own emissive material, so level / colour /
+    //      on-off come from Loxone like every other circuit; coneMat is deliberately unused and z.fx stays empty (no point / spot light), so no light is cast
+    //      into the compound.
+    {
+        const W = { top: 2.2, zf: 24, zb: -16, xl: -20, xr: 20 }, pts = [];
+        for (let x = -18; x <= 18; x += 4) pts.push([x, W.zb]);                         // back wall
+        for (let zz = -12; zz <= 20; zz += 4) { pts.push([W.xl, zz]); pts.push([W.xr, zz]); }   // side walls
+        [-18, -14, -10, -6, -2, 14, 18].forEach(x => pts.push([x, W.zf]));              // front wall, either side of the gate
+        const mk = (w, h, d, mat, y) => { const m = new THREE.InstancedMesh(new THREE.BoxGeometry(w, h, d), mat, pts.length); const M4 = new THREE.Matrix4();
+            pts.forEach(([x, zz], i) => { M4.makeTranslation(x, W.top + y, zz); m.setMatrixAt(i, M4); }); m.instanceMatrix.needsUpdate = true; m.frustumCulled = false; fenceGroup.add(m); return m; };
+        mk(0.24, 0.02, 0.24, housing, 0.01);                // plinth
+        mk(0.2, 0.04, 0.2, Z.boundary.spotMat, 0.04);       // glowing band
+        mk(0.28, 0.03, 0.28, housing, 0.075);               // hood: overhangs the band
+    }
+
+    // ---- roofline LED strip: follows the building's outline (the roof parapet is 0.3 m thick, 0.55 m high, its top edge at LEVEL.ROOF + 0.95). The strip is a 3 cm
+    //      band, flush on the outer face, ROOFLINE.drop below the top edge. It uses the zone's rgbwMat, so level / colour / on-off come from Loxone and the Party
+    //      scene cycles its colour; no light source is added.
+    {
+        const pts = worldPoly('F2', PLAN.F2.poly), top = LEVEL.ROOF + 0.4 + 0.55, y = top - ROOFLINE.drop - 0.015, grp = floorGroups.ROOF;
+        pts.forEach((a, i) => {
+            const b = pts[(i + 1) % pts.length], dx = b.x - a.x, dz = b.z - a.z, len = Math.hypot(dx, dz); if (len < 0.2) return;
+            const n0 = { x: -dz / len, z: dx / len }, mid = { x: (a.x + b.x) / 2, z: (a.z + b.z) / 2 };
+            const s = pointInPoly({ x: mid.x + n0.x * 0.3, z: mid.z + n0.z * 0.3 }, pts) ? -1 : 1;   // the side that faces away from the building
+            const m = new THREE.Mesh(new THREE.BoxGeometry(len + 0.3, 0.03, 0.025), Z.roof.rgbwMat);
+            m.position.set(mid.x + s * n0.x * 0.1625, y, mid.z + s * n0.z * 0.1625); m.rotation.y = -Math.atan2(dz, dx); grp.add(m);
+        });
+    }
+
+    // ---- glass facade LED strip: every 'g' / 'G2' edge of the plans has a 0.3 m grey band above the glass (see buildShell). The strip is a 4 cm band flush on its
+    //      outer face, centred in the band. Zone rgbwMat again: Loxone level / colour / on-off, Party cycles the colour, no light source.
+    ['GF', 'F1', 'F2'].forEach(f => {
+        const def = PLAN[f], pts = worldPoly(f, def.poly);
+        pts.forEach((a, i) => {
+            const type = def.edges[i]; if (type !== 'g' && type !== 'G2') return;
+            const b = pts[(i + 1) % pts.length], dx = b.x - a.x, dz = b.z - a.z, len = Math.hypot(dx, dz), nx = -dz / len, nz = dx / len;
+            const mid = { x: (a.x + b.x) / 2, z: (a.z + b.z) / 2 }, out = pointInPoly({ x: mid.x + nx * 0.4, z: mid.z + nz * 0.4 }, pts) ? -1 : 1;   // away from the building
+            const H = type === 'G2' ? (LEVEL.F2 - LEVEL.GF) : FLOOR_H;
+            const m = new THREE.Mesh(new THREE.BoxGeometry(Math.max(len - 0.25, 0.1), 0.04, 0.02), Z.glass.rgbwMat);
+            m.position.set(mid.x + out * nx * 0.136, LEVEL[f] + H - 0.15, mid.z + out * nz * 0.136); m.rotation.y = -Math.atan2(dz, dx); floorGroups[f].add(m);
+        });
+    });
+
     // darkness gating + output: wraps the main script's applyZone() so it works whoever triggers it (sliders, scenes, tablets, Loxone)
     const baseApply = applyZone;
     applyZone = function (z) {
@@ -70,8 +121,8 @@ function extLightsInit() {
         baseScene(mode);
         const set = (on, lvl) => Object.values(EXTL.zones).forEach(z => { z.on = on; z.level = lvl; z.color = '#ffd29a'; z.autoUntil = 0; });
         if (mode === 'DUSK') { set(true, 80); Z.wall.level = 100; } else if (mode === 'NIGHT') { set(true, 55); Z.wall.level = 100; } else if (mode === 'DEFAULT') set(false, 80);
-        else if (mode === 'PARTY') { Z.wall.on = true; Z.wall.level = 100; Z.wall.color = '#ec4899'; Z.garden.on = true; Z.garden.level = 70; Z.garden.color = '#a855f7'; }
-        else if (mode === 'AWAY') { set(false, 40); Z.wall.on = true; Z.wall.level = 60; }
+        else if (mode === 'PARTY') { Z.roof.on = true; Z.roof.level = 100; Z.glass.on = true; Z.glass.level = 100; Z.wall.on = true; Z.wall.level = 100; Z.wall.color = '#ec4899'; Z.garden.on = true; Z.garden.level = 70; Z.garden.color = '#a855f7'; }
+        else if (mode === 'AWAY') { set(false, 40); Z.wall.on = true; Z.wall.level = 60; Z.boundary.on = true; Z.boundary.level = 60; }   // away: perimeter stays lit
         applyAllZones(); syncZoneUI();
     };
     // the hall tablet lists the exterior circuits as well

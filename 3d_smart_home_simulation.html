@@ -3111,7 +3111,7 @@ function initScene() {
 const SKY = {
     DUSK:  { stops: [[0, '#1d3b70'], [0.45, '#4f79ad'], [0.75, '#a9c0d6'], [1, '#d9dfe2']], fog: 0xa9bccd, hemi: 0.42, sun: 0.45, sunCol: 0xffc58a, sunPos: [-40, 20, 35], exp: 1.05, dark: true },
     DEFAULT: { stops: [[0, '#2f6fb5'], [0.6, '#8fc0e8'], [1, '#e1eef7']], fog: 0xcfe2f1, hemi: 0.75, sun: 1.35, sunCol: 0xfff4e0, sunPos: [35, 60, 30], exp: 1.0, dark: false },
-    NIGHT: { stops: [[0, '#020617'], [0.7, '#0f1d3a'], [1, '#1e2c4a']], fog: 0x0f1d3a, hemi: 0.12, sun: 0.12, sunCol: 0x9db4ff, sunPos: [-25, 50, -30], exp: 0.95, dark: true }
+    NIGHT: { stops: [[0, '#020617'], [0.7, '#0f1d3a'], [1, '#1e2c4a']], fog: 0x0f1d3a, hemi: 0.28, sun: 0.4, sunCol: 0xa9bfff, sunPos: [-30, 50, 30], exp: 1.06, dark: true }   // moonlit: the moon stands in front-left so the compound is lit and the house throws its shadow backwards
 };
 let envKey = 'DUSK';
 function applyEnvironment() {
