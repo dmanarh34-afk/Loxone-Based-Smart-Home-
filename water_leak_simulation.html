@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Water Leak Detection Simulation</title>
+<link rel="stylesheet" href="vendor/fa/css/all.min.css">
+<link rel="stylesheet" href="vendor/inter/inter.css">
+<style>
+:root { --bg:#060b14; --panel:rgba(10,17,30,.86); --line:rgba(148,163,184,.2); --txt:#e2e8f0; --dim:#94a3b8; --cold:#38bdf8; --hot:#f87171; --drain:#9ca3af; --ext:#2dd4bf; --ok:#34d399; --warn:#fbbf24; --bad:#f43f5e; }
+* { box-sizing: border-box; }
+html, body { margin:0; height:100%; background:var(--bg); color:var(--txt); font-family:'Inter',system-ui,sans-serif; font-size:12px; overflow:hidden; user-select:none; }
+#view { position:fixed; inset:0; }
+canvas { display:block; }
+.panel { position:fixed; background:var(--panel); backdrop-filter:blur(14px); border:1px solid var(--line); border-radius:14px; box-shadow:0 18px 40px rgba(0,0,0,.45); }
+#top { top:10px; left:50%; transform:translateX(-50%); display:flex; gap:14px; align-items:center; padding:8px 14px; z-index:20; white-space:nowrap; max-width:96vw; }
+#top .title { font-weight:700; font-size:13px; } #top .title small { display:block; font-weight:400; color:var(--dim); font-size:10px; }
+.chip { padding:4px 10px; border-radius:999px; font-weight:700; border:1px solid var(--line); }
+.chip.ok { color:var(--ok); border-color:rgba(52,211,153,.5); } .chip.warn { color:var(--warn); border-color:rgba(251,191,36,.6); } .chip.bad { color:#fff; background:rgba(244,63,94,.85); animation:pulse 1s infinite; }
+@keyframes pulse { 50% { opacity:.55; } }
+#left { top:70px; left:10px; width:210px; padding:10px; z-index:10; max-height:calc(100vh - 150px); overflow:auto; }
+#right { top:70px; right:10px; width:380px; max-width:94vw; bottom:12px; z-index:10; display:flex; flex-direction:column; }
+h4 { margin:10px 0 6px; font-size:10px; letter-spacing:.08em; text-transform:uppercase; color:var(--dim); } h4:first-child { margin-top:0; }
+button, select, input { font:inherit; color:inherit; }
+.btn { background:rgba(30,41,59,.9); border:1px solid var(--line); border-radius:9px; padding:6px 9px; cursor:pointer; text-align:center; }
+.btn:hover { border-color:#64748b; } .btn.on { background:rgba(14,116,144,.55); border-color:#22d3ee; } .btn.danger { border-color:rgba(244,63,94,.7); color:#fecdd3; } .btn.good { border-color:rgba(52,211,153,.6); color:#a7f3d0; }
+.btn:disabled { opacity:.4; cursor:default; }
+.grid2 { display:grid; grid-template-columns:1fr 1fr; gap:6px; } .grid3 { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; } .grid5 { display:grid; grid-template-columns:repeat(5,1fr); gap:4px; }
+.row { display:flex; justify-content:space-between; align-items:center; gap:8px; margin:5px 0; }
+label.chk { display:flex; align-items:center; gap:7px; margin:4px 0; cursor:pointer; } input[type=checkbox] { accent-color:#22d3ee; width:14px; height:14px; } input[type=range] { width:100%; accent-color:#22d3ee; }
+select, input[type=number] { background:#0b1322; border:1px solid var(--line); border-radius:8px; padding:5px 6px; width:100%; }
+.sw { display:inline-block; width:18px; height:4px; border-radius:2px; vertical-align:middle; margin-right:5px; }
+#tabs { display:flex; border-bottom:1px solid var(--line); } #tabs button { flex:1; padding:9px 2px; background:none; border:none; cursor:pointer; color:var(--dim); font-weight:600; border-bottom:2px solid transparent; }
+#tabs button.on { color:#fff; border-bottom-color:#22d3ee; }
+#body { flex:1; overflow:auto; padding:10px; } .tab { display:none; } .tab.on { display:block; }
+.card { background:rgba(15,23,42,.65); border:1px solid var(--line); border-radius:11px; padding:9px; margin-bottom:9px; }
+.kpis { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; } .kpi { background:rgba(2,6,23,.6); border:1px solid var(--line); border-radius:9px; padding:6px 8px; } .kpi b { display:block; font-size:16px; } .kpi span { color:var(--dim); font-size:10px; }
+.bar { height:7px; border-radius:5px; background:#0b1322; overflow:hidden; margin-top:3px; } .bar i { display:block; height:100%; background:var(--cold); transition:width .3s; }
+.dim { color:var(--dim); } .small { font-size:10px; } .ok { color:var(--ok); } .warn { color:var(--warn); } .bad { color:var(--bad); }
+.valve { display:flex; align-items:center; justify-content:space-between; padding:5px 7px; border:1px solid var(--line); border-radius:8px; margin-bottom:4px; background:rgba(2,6,23,.5); }
+.pill { padding:1px 7px; border-radius:999px; font-size:10px; font-weight:700; } .pill.ok { background:rgba(52,211,153,.18); } .pill.bad { background:rgba(244,63,94,.28); } .pill.warn { background:rgba(251,191,36,.2); } .pill.off { background:rgba(100,116,139,.3); color:#cbd5e1; }
+#log { font-family:ui-monospace,Consolas,monospace; font-size:10.5px; line-height:1.5; } #log div { padding:2px 0; border-bottom:1px solid rgba(148,163,184,.1); } #log .t { color:#64748b; margin-right:6px; } #log .a { color:#fda4af; } #log .g { color:#86efac; } #log .w { color:#fde68a; }
+#caption { position:fixed; left:50%; bottom:20px; transform:translateX(-50%); width:34rem; max-width:92vw; padding:10px 14px; z-index:30; display:none; border-color:rgba(34,211,238,.55); cursor:pointer; }
+#caption b { font-size:13px; color:#67e8f9; } #caption.bad { border-color:rgba(244,63,94,.8); } #caption.bad b { color:#fda4af; }
+#tip { position:fixed; z-index:40; pointer-events:none; display:none; padding:6px 9px; background:rgba(2,6,23,.95); border:1px solid var(--line); border-radius:8px; font-size:11px; max-width:260px; }
+#banner { top:66px; left:50%; transform:translateX(-50%); z-index:25; display:none; padding:10px 14px; width:30rem; max-width:92vw; border:2px solid var(--bad); background:rgba(76,5,25,.92); }
+.hidden { display:none !important; }
+.sensor { display:flex; align-items:center; justify-content:space-between; padding:3px 6px; border-bottom:1px solid rgba(148,163,184,.1); cursor:pointer; } .sensor:hover { background:rgba(148,163,184,.08); }
+@media (max-width:900px) { #left { display:none; } #right { width:94vw; top:auto; height:48vh; bottom:8px; right:3vw; } #top { top:6px; gap:8px; font-size:11px; } }
+</style>
+</head>
+<body>
+<div id="view"></div>
+
+<div id="top" class="panel">
+    <div class="title"><i class="fa-solid fa-droplet" style="color:var(--cold)"></i> Water leak detection<small>X-ray plumbing &amp; Loxone leak protection · Plot 1</small></div>
+    <span id="status" class="chip ok">SYSTEM NORMAL</span>
+    <span><i class="fa-regular fa-clock dim"></i> <b id="clock">14:00</b> <span id="daynight" class="dim small"></span></span>
+    <button class="btn on" id="ropebtn" title="Show / hide the sensor rope (R)"><i class="fa-solid fa-satellite-dish"></i> Rope: ON</button>
+    <span class="grid5" id="speed" style="width:190px"></span>
+</div>
+
+<div id="left" class="panel">
+    <h4>View</h4>
+    <div class="grid3" id="floorbtns"></div>
+    <label class="chk"><input type="checkbox" id="only"> Only the selected floor</label>
+    <div class="row dim small"><span>Building X-ray</span><b id="xv"></b></div>
+    <input type="range" id="xray" min="0" max="100" value="55">
+    <h4>Layers</h4>
+    <label class="chk"><span class="sw" style="background:var(--cold)"></span><input type="checkbox" id="L-cold" checked> Cold water</label>
+    <label class="chk"><span class="sw" style="background:var(--hot)"></span><input type="checkbox" id="L-hot" checked> Hot water</label>
+    <label class="chk"><span class="sw" style="background:var(--drain)"></span><input type="checkbox" id="L-drain" checked> Drainage</label>
+    <label class="chk"><span class="sw" style="background:var(--ext)"></span><input type="checkbox" id="L-ext" checked> Pool / irrigation / mains</label>
+    <label class="chk"><span class="sw" style="background:#e879f9"></span><input type="checkbox" id="L-cable" checked> Leak sensing probe (alongside pipes)</label>
+    <label class="chk"><i class="fa-solid fa-eye dim"></i><input type="checkbox" id="L-rope"> Highlight the sensor rope (fade pipes)</label>
+    <label class="chk"><span class="sw" style="background:#facc15"></span><input type="checkbox" id="L-sensor" checked> Spot leak sensors</label>
+    <label class="chk"><i class="fa-solid fa-gauge dim"></i><input type="checkbox" id="L-dev" checked> Valves &amp; meters</label>
+    <label class="chk"><i class="fa-solid fa-tag dim"></i><input type="checkbox" id="L-label" checked> Room labels</label>
+    <label class="chk"><i class="fa-solid fa-water dim"></i><input type="checkbox" id="L-flow" checked> Water flow animation</label>
+    <h4>Camera</h4>
+    <div class="grid2"><button class="btn" data-cam="front">Front</button><button class="btn" data-cam="aerial">Aerial</button><button class="btn" data-cam="plant">Plant &amp; mains</button><button class="btn" data-cam="roof">Roof tank</button><button class="btn" data-cam="riser">Risers</button><button class="btn" data-cam="pool">Pool</button></div>
+    <h4>Legend</h4>
+    <div class="small dim" style="line-height:1.7">
+        <div><i class="fa-solid fa-circle" style="color:#22c55e"></i> sensor dry &nbsp;<i class="fa-solid fa-circle" style="color:#f43f5e"></i> wet &nbsp;<i class="fa-solid fa-circle" style="color:#fbbf24"></i> fault</div>
+        <div><i class="fa-solid fa-circle" style="color:#22c55e"></i> valve open &nbsp;<i class="fa-solid fa-circle" style="color:#f43f5e"></i> closed</div>
+        <div>Moving beads = water flowing. Drag to orbit, wheel to zoom, right-drag to pan.</div>
+    </div>
+</div>
+
+<div id="right" class="panel">
+    <div id="tabs"></div>
+    <div id="body"></div>
+</div>
+
+<div id="banner" class="panel">
+    <div style="display:flex;gap:10px;align-items:center"><i class="fa-solid fa-droplet" style="font-size:24px;color:#fda4af"></i>
+        <div style="flex:1"><b id="bn-t" style="font-size:13px"></b><div id="bn-s" class="small" style="color:#fecdd3"></div></div>
+        <div style="display:flex;flex-direction:column;gap:5px"><button class="btn" onclick="WL.showLeak()">Show location</button><button class="btn good" onclick="WL.resetAll()">Reset all</button></div></div>
+</div>
+<div id="caption" class="panel" title="Click to dismiss"></div>
+<div id="tip"></div>
+
+<script src="vendor/three/three.min.js"></script>
+<script src="vendor/three/OrbitControls.js"></script>
+<script src="water_leak_sim.js"></script>
+</body>
+</html>

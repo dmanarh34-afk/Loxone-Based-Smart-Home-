@@ -6,12 +6,12 @@
     <meta name="theme-color" content="#0f172a">
     <title>Plot 1 Smart Home</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/TrackballControls.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+    <link rel="stylesheet" href="vendor/fa/css/all.min.css">
+    <link rel="stylesheet" href="vendor/inter/inter.css">
+    <script src="vendor/three/three.min.js"></script>
+    <script src="vendor/three/OrbitControls.js"></script>
+    <script src="vendor/three/TrackballControls.js"></script>
+    <script src="vendor/three/GLTFLoader.js"></script>
     <!-- Floor plan images cropped from the IBS Loxone drawings (generated file, keep next to this page) -->
     <script src="plan_textures.js"></script>
 
@@ -2409,7 +2409,7 @@ function buildEvCable() {
     plug.position.set(B.x, B.y, B.z - 0.095); plug.rotation.y = -Math.PI / 2; EVCABLE.plug = plug; // body axis (+x local) turned to +z: tip into the car plug.visible = false; g.add(plug);
     EVCABLE.glow = new THREE.Mesh(new THREE.SphereGeometry(0.05, 12, 8), new THREE.MeshBasicMaterial({ color: 0x84cc16, transparent: true, opacity: 0.85 }));
     EVCABLE.glow.position.set(B.x, B.y, B.z - 0.02); g.add(EVCABLE.glow);
-    EVCABLE.light = new THREE.PointLight(0x84cc16, 0, 2.6, 2); EVCABLE.light.position.set(B.x, B.y + 0.1, B.z - 0.3); g.add(EVCABLE.light);
+    EVCABLE.light = new THREE.PointLight(0x84cc16, 0, 2.6, 2); EVCABLE.light.position.set(B.x, B.y + 0.1, B.z - 0.3); siteGroup.add(EVCABLE.light); // not inside g: g toggles visible, and a changing light count recompiles every material (freeze)
     const beadMat = new THREE.MeshBasicMaterial({ color: 0xbef264 });
     for (let i = 0; i < 9; i++) { const b = new THREE.Mesh(new THREE.SphereGeometry(0.024, 8, 6), beadMat); b.visible = false; EVCABLE.beads.push(b); g.add(b); }
     EVCABLE.group = g; siteGroup.add(g);
@@ -2672,7 +2672,7 @@ function scatterGrass() {
         }));
         const bs = worldPoly('BSMT', PLAN.BSMT.poly), bb = new THREE.Box3();
         bs.forEach(p => bb.expandByPoint(new THREE.Vector3(p.x, 0, p.z))); bb.min.y = -9; bb.max.y = 9; blocks.push(bb);
-        const R = rng(42), range = (window.matchMedia('(pointer: coarse)').matches || window.innerWidth < 768) ? 16 : 26, step = 1.5, pts = [];
+        const R = rng(42), range = (window.matchMedia('(pointer: coarse)').matches || window.innerWidth < 768) ? 14 : 22, step = 2.1, pts = [];
         for (let x = -range; x <= range; x += step) for (let z = -range + 6; z <= range + 6; z += step) {
             const px = x + (R() - 0.5) * step * 0.8, pz = z + (R() - 0.5) * step * 0.8;
             if (!blocks.some(b => px > b.min.x - PAD && px < b.max.x + PAD && pz > b.min.z - PAD && pz < b.max.z + PAD)) pts.push([px, pz]);
@@ -3593,9 +3593,30 @@ function buildRoomLights() {
     }));
 }
 // room downlights only light the floor being looked at (keeps the number of live lights down)
+// A fixed pool of lights is re-assigned to the floor being shown. Toggling .visible per floor changed the live light count,
+// and three.js recompiles every material shader whenever that count changes (multi-second freeze on floor switch).
+const ROOMLIGHT_POOL = { lights: null };
 function refreshRoomLights() {
-    const show = walk.active ? walk.floor : currentFloor;
-    Object.values(zones).forEach(z => { if (z.roomLight) z.light.visible = z.floor === show; });
+    const show = walk.active ? walk.floor : currentFloor, P = ROOMLIGHT_POOL;
+    const zs = Object.values(zones).filter(z => z.roomLight);
+    if (!P.lights) {
+        const perFloor = {}; zs.forEach(z => { perFloor[z.floor] = (perFloor[z.floor] || 0) + 1; });
+        P.lights = [];
+        for (let i = 0; i < Math.max(...Object.values(perFloor)); i++) { const l = new THREE.PointLight(0xffd29a, 0, 6.5, 2); P.lights.push(l); scene.add(l); }
+        scene.updateMatrixWorld(true);
+        zs.forEach(z => {
+            z.home = z.light; z.wpos = z.home.getWorldPosition(new THREE.Vector3());
+            z.dummy = { intensity: 0, color: new THREE.Color() };   // absorbs applyZone writes while the zone's floor is not shown
+            z.home.visible = false;
+        });
+    }
+    P.lights.forEach(l => { l.intensity = 0; });
+    let i = 0;
+    zs.forEach(z => {
+        if (z.floor === show) { const l = P.lights[i++]; l.position.copy(z.wpos); l.distance = z.home.distance; l.decay = z.home.decay; z.light = l; }
+        else z.light = z.dummy;
+    });
+    zs.forEach(applyZone);
 }
 function buildZoneUI() {
     document.getElementById('all-zone-swatches').innerHTML = LIGHT_SWATCHES.map(([c, t]) =>
@@ -4480,7 +4501,25 @@ function stopExperienceTour() {
     if (xp.saved) { roomLabelsOn = xp.saved.labels; markersOn = xp.saved.markers; xp.saved = null; xpUiSync(); refreshRoomLabels(); refreshMarkers(); }
 }
 
-window.onload = function () { initScene(); if (typeof premiumInit === 'function') premiumInit(); if (typeof closetInit === 'function') closetInit(); if (typeof poolPlantsInit === 'function') poolPlantsInit(); if (typeof extLightsInit === 'function') extLightsInit(); if (typeof diningInit === 'function') diningInit(); if (typeof kitchensInit === 'function') kitchensInit(); if (typeof gfRoomsInit === 'function') gfRoomsInit(); if (typeof studyInit === 'function') studyInit(); if (typeof suitesInit === 'function') suitesInit(); };
+window.onload = function () { initScene(); if (typeof premiumInit === 'function') premiumInit(); if (typeof closetInit === 'function') closetInit(); if (typeof poolPlantsInit === 'function') poolPlantsInit(); if (typeof extLightsInit === 'function') extLightsInit(); if (typeof diningInit === 'function') diningInit(); if (typeof kitchensInit === 'function') kitchensInit(); if (typeof gfRoomsInit === 'function') gfRoomsInit(); if (typeof studyInit === 'function') studyInit(); if (typeof suitesInit === 'function') suitesInit(); pinLights(); setInterval(pinLights, 2000); /* catches lights added by late async model loads */ };
+
+// three.js recompiles every material shader whenever the number of live lights changes, and lights count only while they and all
+// their parents are visible, so hiding a floor / exterior / site group used to change the count (a freeze on floor switch).
+// Fix: lift every light out of its parent chain into the scene root (world position kept), so the count never changes, and make
+// its intensity read 0 while the original parent chain is hidden. Other code keeps writing light.intensity as before.
+function pinLights() {
+    const found = [];
+    scene.traverse(o => { if (o.isLight && o.visible && o.parent && o.parent !== scene) found.push(o); });
+    found.forEach(l => {
+        const chain = []; for (let p = l.parent; p && p !== scene; p = p.parent) chain.push(p);
+        let raw = l.intensity;
+        scene.attach(l);
+        Object.defineProperty(l, 'intensity', {
+            get() { for (let i = 0; i < chain.length; i++) if (!chain[i].visible) return 0; return raw; },
+            set(v) { raw = v; }, configurable: true
+        });
+    });
+}
 </script>
 <script src="premium_features.js"></script>
 <script src="premium_fx.js"></script>
@@ -4494,5 +4533,5 @@ window.onload = function () { initScene(); if (typeof premiumInit === 'function'
 <script src="dining_room.js"></script>
 <script src="kitchens.js"></script>
 <script src="gf_rooms.js"></script>
-</body>
+<script src="estate_focus.js"></script></body>
 </html>

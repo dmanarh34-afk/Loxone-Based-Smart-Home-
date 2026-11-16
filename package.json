@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "http-server -p 8000 -c-1 -o 3d_smart_home_simulation.html"
+    "dev": "http-server -p 8000 -c86400 -o 3d_smart_home_simulation.html",
+    "dev:water": "http-server -p 8001 -c86400 -o water_leak_simulation.html"
   },
   "devDependencies": {
     "http-server": "^14.1.1"
