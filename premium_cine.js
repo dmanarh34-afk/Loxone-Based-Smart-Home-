@@ -59,8 +59,15 @@ function cineShots() {
           pos: [[-1.5, 1.5, 30], [3.5, 1.7, 28.5], [8.5, 1.8, 21], [7, 2.0, 14]], look: [[6, 1.1, 24.3], [8, 1.3, 24.3], [5, 2.6, 12], [1, 4, 8]], on: () => { if (!isGateOpen) toggleMainGate(); } },
         { n: 'Glass box', dur: 9, fov: [30, 30], cap: ['Double-height glass living space', 'DALI / DMX lighting follows the time of day'],
           pos: [[16, 2.2, 19], [10, 2.6, 25], [0, 3, 26], [-8, 3.4, 22]], look: [[1, 3.6, 6], [1, 3.8, 6], [1, 3.8, 6], [0, 3.8, 6]] },
-        { n: 'Pool', dur: 8, fov: [32, 32], cap: ['Pool, plunge pool & louvred pergola', 'Underwater, deck and pergola lighting on Loxone'], scene: 'RELAX_POOL',
+        // pool lighting: one shot per Loxone pool mode (Swim, Relax, Party, Off), each from a different side of the deck
+        { n: 'Pool swim', dur: 7, fov: [32, 32], cap: ['Pool · Swim mode', 'Underwater, plunge, deck and pergola lights at full white'], pool: 'swim',
           pos: [[-17, 1.3, 14], [-13, 1.5, 11.5], [-10.5, 1.8, 8.5]], look: [[-6.5, 1.2, 4], [-6, 1.5, 4], [-5, 2, 3]] },
+        { n: 'Pool relax', dur: 7, fov: [32, 32], cap: ['Pool · Relax mode', 'Slow blue breathing glow, low deck and pergola light'], pool: 'relax',
+          pos: [[-10.5, 1.8, 8.5], [-13, 1.5, 11.5], [-17, 1.3, 14]], look: [[-5, 2, 3], [-6, 1.5, 4], [-6.5, 1.2, 4]] },
+        { n: 'Pool party', dur: 7, fov: [32, 32], cap: ['Pool · Party mode', 'Colour-cycling underwater lights, every circuit at high level'], pool: 'party',
+          pos: [[-17, 1.3, 14], [-13, 1.5, 11.5], [-10.5, 1.8, 8.5]], look: [[-6.5, 1.2, 4], [-6, 1.5, 4], [-5, 2, 3]] },
+        { n: 'Pool off', dur: 4, fov: [32, 32], cap: ['Pool · Off', 'One touch switches every pool circuit off'], pool: 'off',
+          pos: [[-10.5, 1.8, 8.5], [-13, 1.5, 11.5], [-17, 1.3, 14]], look: [[-5, 2, 3], [-6, 1.5, 4], [-6.5, 1.2, 4]] },
         { n: 'EV charging', dur: 9, fov: [34, 34], cap: ['EV charging', 'Loxone wallbox: PV-surplus or fast charge, shed first when the grid is lost'], exp: 1.0,
           on: () => { setEvChargeMode('fast'); if (!isEvCharging) toggleEvCharging(); },
           pos: [[-2.6, 1.7, 21.5], [-4.4, 1.5, 20.2], [-6.0, 1.4, 19.3]], look: [[-6.5, 0.95, 16.2], [-6.5, 0.95, 16.2], [-6.5, 0.95, 16.2]] },
@@ -221,7 +228,7 @@ function cineGo(i) {
     if (!CINE.active) return;
     if (i >= CINE.shots.length) { cineEnd(); return; }
     const s = CINE.shots[i]; CINE.i = i; CINE.t = 0;
-    if (s.scene === 'RELAX_POOL') setPoolScene('relax'); else if (s.scene === 'CINEMA') { setCinemaScene('movie'); } else if (s.scene) triggerScene(s.scene);
+    if (s.pool) setPoolScene(s.pool); else if (s.scene === 'RELAX_POOL') setPoolScene('relax'); else if (s.scene === 'CINEMA') { setCinemaScene('movie'); } else if (s.scene) triggerScene(s.scene);
     setFloorFilter(s.floor || 'ALL', true); if (s.exp) renderer.toneMappingExposure = s.exp; if (s.on) s.on();
     cineRoomLight(s); cineVideoBegin(s);
     CINE.caption = s.cap; px$('cine-cap-t').innerText = s.cap[0]; px$('cine-cap-s').innerText = s.cap[1];
