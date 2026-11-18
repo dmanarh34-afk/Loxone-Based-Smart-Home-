@@ -3096,7 +3096,8 @@ function initScene() {
     triggerScene('DUSK');
     // start with every device type unticked (legend + 3D); the cinematic tour switches the lighting / EV ones back on while it plays
     TYPE_ORDER.forEach(t => setTypeVisible(t, false));
-    document.querySelectorAll('#legend-body input[type=checkbox]').forEach(c => { c.checked = false; });
+    setTypeVisible('tablet', true);   // the hall and master wall tablets stay visible; everything else starts hidden
+    buildLegend();
     // right-hand controls start unticked as well: light zones, exterior lights, pool master, markers, room labels, plan overlay
     setAllZonesOn(false); setExteriorLights(false); document.getElementById('ext-toggle').checked = false; setPoolMaster(false);
     ['markers-toggle', 'labels-toggle'].forEach(id => { document.getElementById(id).checked = false; });
@@ -3727,7 +3728,7 @@ function buildLegend() {
     const cnt = (f, t) => live.filter(d => d.type === t && (!f || d.floor === f)).length;
     tb.innerHTML = TYPE_ORDER.filter(t => cnt(null, t) > 0).map(t => `<tr class="legend-row border-t border-slate-700/40">
         <td class="p-2"><label class="flex items-center gap-2 cursor-pointer">
-            <input type="checkbox" checked onchange="setTypeVisible('${t}', this.checked)" class="accent-emerald-500">
+            <input type="checkbox" ${visibleTypes[t] ? 'checked' : ''} onchange="setTypeVisible('${t}', this.checked)" class="accent-emerald-500">
             <span class="inline-block w-3 h-3 rounded-full" style="background:${TYPE[t].color}"></span>
             <span class="text-slate-200 hover:underline" onclick="event.preventDefault(); locateType('${t}')">${TYPE[t].name}</span></label></td>
         ${['BSMT', 'GF', 'F1', 'F2'].map(f => `<td class="text-center text-slate-400">${cnt(f, t) || '-'}</td>`).join('')}
