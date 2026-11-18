@@ -71,6 +71,13 @@ function cineShots() {
         { n: 'EV charging', dur: 9, fov: [34, 34], cap: ['EV charging', 'Loxone wallbox: PV-surplus or fast charge, shed first when the grid is lost'], exp: 1.0,
           on: () => { setEvChargeMode('fast'); if (!isEvCharging) toggleEvCharging(); },
           pos: [[-2.6, 1.7, 21.5], [-4.4, 1.5, 20.2], [-6.0, 1.4, 19.3]], look: [[-6.5, 0.95, 16.2], [-6.5, 0.95, 16.2], [-6.5, 0.95, 16.2]] },
+        // estate features: wind / rain pergola and the automated garage door
+        { n: 'Pergola', dur: 9, fov: [34, 34], cap: ['Wind & rain pergola', 'Rain sensor and anemometer close the louvres on their own'], scene: 'DUSK', floor: 'ALL', exp: 1.0,
+          on: () => { pxRain(true); pxWind(46); },
+          pos: [[-12, 1.7, 9.5], [-9.5, 1.5, 8], [-7.5, 1.3, 7]], look: [[-4.4, 3.8, 3], [-4.4, 3.8, 3], [-4.4, 3.9, 3]] },
+        { n: 'Garage', dur: 8, fov: [34, 34], cap: ['Garage door', 'Opens from the intercom, the app or a tablet; the bay light follows'], exp: 1.0,
+          on: () => { pxGarage(true); },
+          pos: [[19, 2.2, -4], [18, 2.0, -6.5], [16.5, 1.8, -8.2]], look: [[13.3, 1.3, -10.5], [13.3, 1.3, -10.5], [13.3, 1.3, -10.5]] },
         // chapter 2: ground floor (each room is lit in turn by its Loxone light zone: switch on, warm to cool white, dim)
         room('GF', [4.42, 7.96], ['Entrance', 'Video intercom, door tablet and welcome lighting'], 6, { scene: 'DUSK', prefer: -1.2, rmax: 3.2 }),
         { n: 'Living', lf: 'GF', lc: [0.4, 5.0], exp: 0.9, dur: 10, fov: [48, 52], cap: ['Living & dining', 'Scenes, shades and multiroom audio in one touch'], floor: 'ALL',
@@ -106,6 +113,9 @@ function cineShots() {
         // chapter 6: energy and finale
         { n: 'Energy', dur: 8, fov: [32, 32], cap: ['Energy independence', 'Solar, battery, generator relay and load shedding'], floor: 'ALL', scene: 'DUSK',
           exp: 1.1, on: () => shedDoor(true), pos: [[SHED.cx - 3.2, 2.4, SHED.cz + 4.2], [SHED.cx - 1.3, 1.7, SHED.cz + 2.3], [SHED.cx - 0.25, 1.6, SHED.cz + 0.45]], look: [[SHED.cx, 1.3, SHED.cz], [SHED.cx + 0.6, 1.3, SHED.cz], [SHED.cx + 1.45, 1.3, SHED.cz - 0.55]] },
+        { n: 'Outage', dur: 9, fov: [34, 34], cap: ['Grid outage', 'The generator relay closes and the Miniserver sheds the heavy loads'], scene: 'NIGHT', floor: 'ALL', exp: 1.0,
+          on: () => { pxOutage(true); pxGenerator(); },
+          pos: [[22, 2.4, -6], [21, 2.0, -9], [20.5, 1.8, -10.6]], look: [[18.3, 1.0, -12.1], [18.3, 1.0, -12.1], [18.3, 1.0, -12.1]] },
         { n: 'Night', dur: 11, fov: [34, 28], cap: ['Plot 1 · Glenshire Hills', 'Premium package · The Intelligent Estate'], title: true, scene: 'NIGHT', floor: 'ALL', exp: 1.0,
           pos: [[13, 3.8, 31], [20, 9, 38], [30, 19, 46]], look: [[1, 4.6, 7], [1, 4.8, 7], [1, 4.6, 6]] }
     ].map(s => ({ ...s, posC: new THREE.CatmullRomCurve3(s.pos.map(cv3), false, 'centripetal'), lookC: new THREE.CatmullRomCurve3(s.look.map(cv3), false, 'centripetal') }));
@@ -224,10 +234,14 @@ function cineStart(record) {
     cineMusicStart(); if (record) setTimeout(cineRecStart, 150);
     setTimeout(() => cineGo(0), 900);
 }
+function cinePxReset() {   // estate demos (rain, garage, outage) are undone before every shot and when the film ends
+    try { if (PX.wx.rain) pxRain(false); if (PX.wx.wind !== 12) pxWind(12); if (PX.sec.garageOpen) pxGarage(false);
+        if (PX.en.outage) pxOutage(false); PX.en.genManual = false; PX.en.gen = false; } catch (e) { }
+}
 function cineGo(i) {
     if (!CINE.active) return;
     if (i >= CINE.shots.length) { cineEnd(); return; }
-    const s = CINE.shots[i]; CINE.i = i; CINE.t = 0;
+    const s = CINE.shots[i]; CINE.i = i; CINE.t = 0; cinePxReset();
     if (s.pool) setPoolScene(s.pool); else if (s.scene === 'RELAX_POOL') setPoolScene('relax'); else if (s.scene === 'CINEMA') { setCinemaScene('movie'); } else if (s.scene) triggerScene(s.scene);
     setFloorFilter(s.floor || 'ALL', true); if (s.exp) renderer.toneMappingExposure = s.exp; if (s.on) s.on();
     cineRoomLight(s); cineVideoBegin(s);
@@ -300,7 +314,7 @@ function cineStop() {
     px$('cine-cap').classList.remove('on'); px$('cine-top').style.height = px$('cine-bot').style.height = '0'; px$('cine-fade').style.opacity = 0;
     if (LK.fx.valveG) LK.fx.valveG.visible = true;
     if (CINE.hid) { lkShowCables(CINE.hid.cables); Object.values(LK.ctrls).forEach(k => { k.g.visible = true; }); PX.sec.beams = CINE.hid.beams; CINE.hid = null; }
-    cineVideoEnd(); cineLightFloor = null; refreshRoomLights();
+    cineVideoEnd(); cineLightFloor = null; refreshRoomLights(); cinePxReset();
     if (CINE.vt) { Object.keys(CINE.vt).forEach(t => setTypeVisible(t, CINE.vt[t])); CINE.vt = null; }
     if (CINE.ev) { isEvCharging = CINE.ev.on; evChargeMode = CINE.ev.mode; updateEvChargerUI(); CINE.ev = null; }
     const S = CINE.saved; document.body.classList.remove('cine-on'); if (S && S.exp) renderer.toneMappingExposure = S.exp;
