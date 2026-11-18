@@ -68,7 +68,7 @@ function premiumBuild3D() {
     const steel = new THREE.MeshStandardMaterial({ color: 0x9aa3ad, roughness: 0.4, metalness: 0.7 });
 
     // ---- garage with sectional door (motorised, linked to intercom / Miniserver)
-    const g = new THREE.Group(); g.position.set(13.3, 0, -12.6); gs.add(g);
+    const g = new THREE.Group(); g.position.set(13.3, 0, -12.6); gs.add(g); T.grpGarage = g;
     const gw = 5.4, gd = 5, gh = 2.9;
     box(gw, gh, 0.25, MAT.brickWall, 0, gh / 2, -gd / 2, g);               // back wall
     box(0.25, gh, gd, MAT.brickWall, -gw / 2, gh / 2, 0, g);               // west wall
@@ -116,7 +116,7 @@ function premiumBuild3D() {
     T.driveway = { x0: LX0, x1: LX1, z0: LZ0, z1: LZ1 };
 
     // ---- VRF / VRV outdoor unit (Modbus gateway to the Miniserver)
-    const vrf = new THREE.Group(); vrf.position.set(18.3, 0, -14.3); gs.add(vrf);
+    const vrf = new THREE.Group(); vrf.position.set(18.3, 0, -14.3); gs.add(vrf); T.grpVrf = vrf;
     box(1.5, 1.6, 0.85, steel, 0, 0.8, 0, vrf); box(1.6, 0.1, 0.95, dark, 0, 0.05, 0, vrf);
     for (let i = 0; i < 9; i++) box(1.38, 0.025, 0.02, dark, 0, 0.35 + i * 0.12, 0.44, vrf);
     const fan = new THREE.Group(); fan.position.set(0, 1.62, 0); vrf.add(fan); T.vrfFan = fan;
@@ -132,7 +132,7 @@ function premiumBuild3D() {
     const gsm = new THREE.PointLight(0xff7a2a, 0, 4, 2); gsm.position.set(0.55, 1.4, -0.2); gen.add(gsm); T.genLight = gsm;
 
     // ---- video intercom door station at the gate
-    const ic = new THREE.Group(); ic.position.set(1.55, 0, 23.55); gs.add(ic);
+    const ic = new THREE.Group(); ic.position.set(1.55, 0, 23.55); gs.add(ic); T.grpIc = ic;
     box(0.28, 1.5, 0.2, MAT.dark, 0, 0.75, 0, ic);
     const icCv = document.createElement('canvas'); icCv.width = 128; icCv.height = 96; const ig = icCv.getContext('2d');
     ig.fillStyle = '#0b1220'; ig.fillRect(0, 0, 128, 96); ig.fillStyle = '#8dc63f'; ig.font = 'bold 20px Arial'; ig.textAlign = 'center'; ig.fillText('loxone', 64, 36);
@@ -160,7 +160,7 @@ function premiumBuild3D() {
     // ---- louvred pergola over the pool deck (wind / rain aware)
     const cols = [[487, 432], [578, 433], [487, 597], [578, 595]].map(([x, y]) => W('GF', x, y));
     const px0 = Math.min(...cols.map(c => c.x)), px1 = Math.max(...cols.map(c => c.x)), pz0 = Math.min(...cols.map(c => c.z)), pz1 = Math.max(...cols.map(c => c.z));
-    const topY = LEVEL.GF + FLOOR_H + 0.02, pg = new THREE.Group(); floorGroups.GF.add(pg); T.louvres = [];
+    const topY = LEVEL.GF + FLOOR_H + 0.02, pg = new THREE.Group(); floorGroups.GF.add(pg); T.louvres = []; T.grpPergola = pg;
     box(px1 - px0 + 0.3, 0.12, 0.12, MAT.frame, (px0 + px1) / 2, topY, pz0, pg); box(px1 - px0 + 0.3, 0.12, 0.12, MAT.frame, (px0 + px1) / 2, topY, pz1, pg);
     box(0.12, 0.12, pz1 - pz0, MAT.frame, px0, topY, (pz0 + pz1) / 2, pg); box(0.12, 0.12, pz1 - pz0, MAT.frame, px1, topY, (pz0 + pz1) / 2, pg);
     const nb = Math.max(6, Math.round((pz1 - pz0) / 0.3)), pitch = (pz1 - pz0) / nb;

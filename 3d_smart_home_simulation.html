@@ -1711,6 +1711,7 @@ function roofModel(M, job) { if (M.root) job(); else if (!M.failed) M.jobs.push(
 
 function buildRoofKit() {
     const g = floorGroups.ROOF, top = LEVEL.ROOF + 0.4;
+    const pvG = ROOFM.pvG = new THREE.Group(), tkG = ROOFM.tkG = new THREE.Group(); g.add(pvG, tkG);   // package switch hides these as units (PV array and polytanks are Premium only)
     // ---- PV array: 3 rows x 5 panels, tilted 12 deg to the south (+z), contiguous along each row, on rails and posts, centred in the roof rectangle
     const a = W('F2', 640, 330), b = W('F2', 1000, 560);
     const PW = 1.6, GAP = 0.04, ROWS = 3, COLS = 5, PITCH = 1.5, TILT = 12 * Math.PI / 180;
@@ -1718,7 +1719,7 @@ function buildRoofKit() {
     const fallback = [];
     for (let i = 0; i < 5; i++) for (let j = 0; j < 3; j++) {
         const pv = new THREE.Mesh(new THREE.BoxGeometry(PW, 0.04, PW * 0.48), MAT.solar);
-        pv.position.set(x0 + PW / 2 + i * (PW + GAP), top + 0.3, zFirst + j * PITCH); pv.rotation.x = TILT; pv.castShadow = true; g.add(pv); fallback.push(pv);
+        pv.position.set(x0 + PW / 2 + i * (PW + GAP), top + 0.3, zFirst + j * PITCH); pv.rotation.x = TILT; pv.castShadow = true; pvG.add(pv); fallback.push(pv);
     }
     const frameMat = new THREE.MeshStandardMaterial({ color: 0x9aa3ad, metalness: 0.75, roughness: 0.4 });
     roofModel(ROOFM.pv, () => {
@@ -1729,13 +1730,13 @@ function buildRoofKit() {
             for (let i = 0; i < COLS; i++) {
                 const holder = new THREE.Group(), m = M.root.clone(true);
                 m.position.set(-M.center.x, -M.center.y, -M.center.z); holder.add(m); holder.scale.setScalar(k);
-                holder.rotation.x = TILT; holder.position.set(x0 + PW / 2 + i * (PW + GAP), yc, zc); g.add(holder);
+                holder.rotation.x = TILT; holder.position.set(x0 + PW / 2 + i * (PW + GAP), yc, zc); pvG.add(holder);
             }
             // support: rails under the low (south) and high (north) edges, posts between every second panel
             [[+1, yc - halfD * sT - 0.06], [-1, yc + halfD * sT - 0.06]].forEach(([sgn, ry]) => {
-                const rail = new THREE.Mesh(new THREE.BoxGeometry(rowW + 0.1, 0.045, 0.05), frameMat); rail.position.set(x0 + rowW / 2, ry, zc + sgn * halfD * cT); g.add(rail);
+                const rail = new THREE.Mesh(new THREE.BoxGeometry(rowW + 0.1, 0.045, 0.05), frameMat); rail.position.set(x0 + rowW / 2, ry, zc + sgn * halfD * cT); pvG.add(rail);
                 [x0 + 0.15, x0 + 2 * (PW + GAP) - GAP / 2, x0 + 4 * (PW + GAP) - GAP / 2, x0 + rowW - 0.15].forEach(px => {
-                    const h = ry - top, post = new THREE.Mesh(new THREE.BoxGeometry(0.045, h, 0.045), frameMat); post.position.set(px, top + h / 2, zc + sgn * halfD * cT); g.add(post);
+                    const h = ry - top, post = new THREE.Mesh(new THREE.BoxGeometry(0.045, h, 0.045), frameMat); post.position.set(px, top + h / 2, zc + sgn * halfD * cT); pvG.add(post);
                 });
             });
         }
@@ -1743,22 +1744,22 @@ function buildRoofKit() {
     // ---- two 500 L polytanks behind the array; the left one carries a sight gauge for the water level (see tankTarget)
     [W('F2', 700, 270), W('F2', 770, 270)].forEach((p, i) => {
         const tank = new THREE.Mesh(new THREE.CylinderGeometry(0.75, 0.75, 1.6, 20), MAT.tank);
-        tank.position.set(p.x, top + 0.8, p.z + 0.4); tank.castShadow = true; g.add(tank);
+        tank.position.set(p.x, top + 0.8, p.z + 0.4); tank.castShadow = true; tkG.add(tank);
         roofModel(ROOFM.tank, () => {
             tank.parent && tank.parent.remove(tank);
             const M = ROOFM.tank, H = 1.35, k = H / M.size.y, holder = new THREE.Group(), m = M.root.clone(true);
-            m.position.set(-M.base.x, -M.base.y, -M.base.z); holder.add(m); holder.scale.setScalar(k); holder.rotation.y = i * 0.9; holder.position.set(p.x, top, p.z + 0.4); g.add(holder);
+            m.position.set(-M.base.x, -M.base.y, -M.base.z); holder.add(m); holder.scale.setScalar(k); holder.rotation.y = i * 0.9; holder.position.set(p.x, top, p.z + 0.4); tkG.add(holder);
             if (i === 0) {   // sight gauge: dark backing strip + blue water column (scaled by tankTarget in animate)
                 const R = M.size.x * k / 2, gx = p.x, gz = p.z + 0.4 + R + 0.01;
-                const back = new THREE.Mesh(new THREE.BoxGeometry(0.09, 1.0, 0.02), new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.4 })); back.position.set(gx, top + 0.15 + 0.5, gz); g.add(back);
+                const back = new THREE.Mesh(new THREE.BoxGeometry(0.09, 1.0, 0.02), new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.4 })); back.position.set(gx, top + 0.15 + 0.5, gz); tkG.add(back);
                 if (waterLevelMesh && waterLevelMesh.parent) waterLevelMesh.parent.remove(waterLevelMesh);
                 waterLevelMesh = new THREE.Mesh(new THREE.BoxGeometry(0.05, 1.0, 0.02), new THREE.MeshBasicMaterial({ color: 0x38bdf8 }));
-                waterLevelMesh.geometry.translate(0, 0.5, 0); waterLevelMesh.position.set(gx, top + 0.15, gz + 0.012); waterLevelMesh.scale.y = tankTarget; g.add(waterLevelMesh);
+                waterLevelMesh.geometry.translate(0, 0.5, 0); waterLevelMesh.position.set(gx, top + 0.15, gz + 0.012); waterLevelMesh.scale.y = tankTarget; tkG.add(waterLevelMesh);
             }
         });
         if (i === 0) {
             waterLevelMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.77, 0.77, 1.6, 20), new THREE.MeshBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.55 }));
-            waterLevelMesh.geometry.translate(0, 0.8, 0); waterLevelMesh.position.set(p.x, top, p.z + 0.4); waterLevelMesh.scale.y = 0.85; g.add(waterLevelMesh);
+            waterLevelMesh.geometry.translate(0, 0.8, 0); waterLevelMesh.position.set(p.x, top, p.z + 0.4); waterLevelMesh.scale.y = 0.85; tkG.add(waterLevelMesh);
         }
     });
 }
@@ -2379,7 +2380,7 @@ function loadEvCharger() {
         const grp = new THREE.Group(); grp.add(root); grp.position.set(...EVCH.pos); grp.rotation.y = EVCH.rotY;
         const led = new THREE.Mesh(new THREE.SphereGeometry(0.03, 12, 8), EVCH.ledMat); led.position.set(0, 1.47, 0.16); grp.add(led); // charging status LED (see updateEv)
         if (EVCH.fallback) EVCH.fallback.parent.remove(EVCH.fallback);
-        EVCH.parent.add(grp);
+        EVCH.parent.add(grp); EVCH.grp = grp;
     }, undefined, e => console.warn('ev charger model failed to load', e));
 }
 // Charge cable from the kiosk's near wallbox to the Tesla's charge port (rear left tail-light). It pays out from the wallbox when
@@ -3722,15 +3723,16 @@ function toggleHazardAlarm() {
 ===================================================================== */
 function buildLegend() {
     const tb = document.getElementById('legend-body');
-    const cnt = (f, t) => devices.filter(d => d.type === t && (!f || d.floor === f)).length;
-    tb.innerHTML = TYPE_ORDER.map(t => `<tr class="legend-row border-t border-slate-700/40">
+    const live = devices.filter(d => !d.tierOff);   // devices outside the selected package are left out of the legend
+    const cnt = (f, t) => live.filter(d => d.type === t && (!f || d.floor === f)).length;
+    tb.innerHTML = TYPE_ORDER.filter(t => cnt(null, t) > 0).map(t => `<tr class="legend-row border-t border-slate-700/40">
         <td class="p-2"><label class="flex items-center gap-2 cursor-pointer">
             <input type="checkbox" checked onchange="setTypeVisible('${t}', this.checked)" class="accent-emerald-500">
             <span class="inline-block w-3 h-3 rounded-full" style="background:${TYPE[t].color}"></span>
             <span class="text-slate-200 hover:underline" onclick="event.preventDefault(); locateType('${t}')">${TYPE[t].name}</span></label></td>
         ${['BSMT', 'GF', 'F1', 'F2'].map(f => `<td class="text-center text-slate-400">${cnt(f, t) || '-'}</td>`).join('')}
         <td class="text-center font-bold text-slate-100 pr-2">${cnt(null, t)}</td></tr>`).join('') +
-        `<tr class="border-t border-slate-600 bg-slate-900/50"><td class="p-2 font-bold text-slate-200">Total</td>${['BSMT', 'GF', 'F1', 'F2'].map(f => `<td class="text-center font-bold text-slate-300">${devices.filter(d => d.floor === f).length}</td>`).join('')}<td class="text-center font-bold text-emerald-400 pr-2">${devices.length}</td></tr>`;
+        `<tr class="border-t border-slate-600 bg-slate-900/50"><td class="p-2 font-bold text-slate-200">Total</td>${['BSMT', 'GF', 'F1', 'F2'].map(f => `<td class="text-center font-bold text-slate-300">${live.filter(d => d.floor === f).length}</td>`).join('')}<td class="text-center font-bold text-emerald-400 pr-2">${live.length}</td></tr>`;
 }
 function setTypeVisible(t, v) { visibleTypes[t] = v; devices.filter(d => d.type === t).forEach(d => { d.root.visible = v; }); refreshMarkers(); }
 function locateType(t) { flashType = t; flashUntil = performance.now() + 3000; if (!markersOn) { markersOn = true; document.getElementById('markers-toggle').checked = true; } if (currentFloor === 'ALL') { xrayOn = true; document.getElementById('xray-toggle').checked = true; } refreshMarkers(); }
@@ -4260,7 +4262,7 @@ function walkUseCheck() {
 }
 function walkClickUse() {
     raycaster.setFromCamera({ x: 0, y: 0 }, camera);
-    const hit = raycaster.intersectObjects(pickables, false).find(h => h.object.userData.dev && h.object.userData.dev.type === 'tablet' && h.distance < 3.6);
+    const hit = raycaster.intersectObjects(pickables, false).find(h => h.object.userData.dev && h.object.userData.dev.type === 'tablet' && !h.object.userData.dev.tierOff && h.distance < 3.6);
     if (hit) openTablet(hit.object.userData.dev);
 }
 
@@ -4362,7 +4364,7 @@ function buildShed() {
 
     // hybrid inverter on the east wall
     const ix = x1 - t - 0.1, iz = cz - 0.55;
-    const inv = new THREE.Group(); inv.position.set(ix, 1.35, iz); inv.rotation.y = -Math.PI / 2; g.add(inv);
+    const inv = new THREE.Group(); inv.position.set(ix, 1.35, iz); inv.rotation.y = -Math.PI / 2; g.add(inv); SHED.invGroup = inv; SHED.batGroups = [];
     const invFallback = [box(0.62, 0.8, 0.2, MAT.devWhite, 0, 0, 0, inv)];
     for (let i = 0; i < 6; i++) invFallback.push(box(0.5, 0.012, 0.03, new THREE.MeshStandardMaterial({ color: 0xcbd5e1 }), 0, -0.3 + i * 0.03, 0.115, inv));
     // SolarEdge single-phase inverter (model origin = back-centre, front towards +z): hangs on the east wall at the old box's height
@@ -4378,7 +4380,7 @@ function buildShed() {
     // battery stack
     const bz = cz + 0.55;
     for (let i = 0; i < 3; i++) {
-        const bm = new THREE.Group(); bm.position.set(x1 - t - 0.14, 0.32 + i * 0.34, bz); bm.rotation.y = -Math.PI / 2; g.add(bm);
+        const bm = new THREE.Group(); bm.position.set(x1 - t - 0.14, 0.32 + i * 0.34, bz); bm.rotation.y = -Math.PI / 2; g.add(bm); SHED.batGroups.push(bm);
         box(0.62, 0.3, 0.26, new THREE.MeshStandardMaterial({ color: 0x374151, roughness: 0.5 }), 0, 0, 0, bm);
         for (let k = 0; k < 4; k++) box(0.03, 0.03, 0.006, new THREE.MeshBasicMaterial({ color: 0x22c55e }), -0.2 + k * 0.1, 0.06, 0.133, bm);
         box(0.3, 0.05, 0.006, new THREE.MeshBasicMaterial({ color: LOXGREEN }), 0.1, -0.06, 0.133, bm);
@@ -4562,5 +4564,6 @@ function pinLights() {
 <script src="gf_rooms.js"></script>
 <script src="master_bath.js"></script>
 <script src="study_shelves.js"></script>
-<script src="estate_focus.js"></script></body>
+<script src="estate_focus.js"></script>
+<script src="tiers.js"></script></body>
 </html>

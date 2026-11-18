@@ -92,7 +92,7 @@ function lkBuild() {
     });
 
     // valve actuator (Loxone relay on the main water supply), next to the TTDM cabinet
-    const vg = new THREE.Group(); vg.position.set(shed.x + 2.2, 0, shed.z + 1.2); siteGroup.add(vg);
+    const vg = new THREE.Group(); vg.position.set(shed.x + 2.2, 0, shed.z + 1.2); siteGroup.add(vg); LK.valveGroup = vg;
     const pipe = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.8, 10), new THREE.MeshStandardMaterial({ color: 0x2563eb, roughness: 0.5 })); pipe.rotation.z = Math.PI / 2; pipe.position.y = 0.45; vg.add(pipe);
     const vb = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.2, 0.2), new THREE.MeshStandardMaterial({ color: 0x1f2937 })); vb.position.y = 0.45; vg.add(vb);
     const lever = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.04, 0.05), new THREE.MeshBasicMaterial({ color: 0x22c55e })); lever.position.y = 0.62; vg.add(lever);
