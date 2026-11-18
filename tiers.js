@@ -35,7 +35,7 @@ const TIER_DEF = {
     }
 };
 // device type -> feature that supplies it (types not listed are in every package)
-const TIER_TYPE_FEAT = { speaker: 'audio', rgbw: 'rgbw', dimmer: 'rgbw', unknown: 'panels', display: 'panels', tablet: 'panels', evcharger: 'solar', inverter: 'solar' };
+const TIER_TYPE_FEAT = { speaker: 'audio', rgbw: 'rgbw', dimmer: 'rgbw', unknown: 'panels', display: 'panels', evcharger: 'solar', inverter: 'solar' };
 const TIER_FLOOR_PRIO = ['GF', 'F1', 'F2', 'BSMT'];
 
 const TIER = { cur: null, feats: new Set(), saved: {}, xpAll: null, ready: false };
@@ -154,7 +154,7 @@ function tierSecurityTab() {
 function tierChrome() {
     tqa('#left-panel .cam-btn').forEach(b => {
         const oc = b.getAttribute('onclick') || '';
-        const feat = /'CINEMA'/.test(oc) ? 'cinema' : /'POOL'/.test(oc) ? 'pool' : /'ROOF'|'SHED'/.test(oc) ? 'solar' : /TAB_HALL|TAB_MASTER/.test(oc) ? 'panels' : null;
+        const feat = /'CINEMA'/.test(oc) ? 'cinema' : /'POOL'/.test(oc) ? 'pool' : /'ROOF'|'SHED'/.test(oc) ? 'solar' : null;
         if (feat) tshow(b, tHas(feat));
     });
     const sv = px$('solar-live-val'), wv = px$('water-live-val');
@@ -162,7 +162,7 @@ function tierChrome() {
     // guided tours skip the steps whose equipment is not in this package
     if (typeof XP_STEPS !== 'undefined') {
         if (!TIER.xpAll) TIER.xpAll = XP_STEPS.slice();
-        const need = { 'Arrival: sliding gate': 'access', 'Front door: tap to enter': 'access', 'EV wallbox on Loxone': 'solar', 'Solar inverter & DB shed': 'solar', 'Hybrid inverter & battery': 'solar', 'Pool & deck': 'pool', 'Basement cinema': 'cinema', 'Hall control tablet': 'panels', 'Your turn: master tablet': 'panels', 'Master bed LED strip': 'rgbw' };
+        const need = { 'Arrival: sliding gate': 'access', 'Front door: tap to enter': 'access', 'EV wallbox on Loxone': 'solar', 'Solar inverter & DB shed': 'solar', 'Hybrid inverter & battery': 'solar', 'Pool & deck': 'pool', 'Basement cinema': 'cinema', 'Master bed LED strip': 'rgbw' };
         if (typeof xp !== 'undefined' && xp.i >= 0) tsafe(stopExperienceTour);
         XP_STEPS.length = 0; TIER.xpAll.forEach(s => { if (!need[s.t] || tHas(need[s.t])) XP_STEPS.push(s); });
     }
