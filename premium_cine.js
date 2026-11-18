@@ -50,6 +50,15 @@ function cineAuto(f, c, opt = {}) {
 function cineShots() {
     const table = IP('GF', 590, 480), bd = INTERIOR.F2.furniture.find(f => f[0] === 'bed'), ba = IP('F2', bd[1], bd[2]), bb = IP('F2', bd[3], bd[4]);
     const bx0 = Math.min(ba.x, bb.x), bx1 = Math.max(ba.x, bb.x), bz = (ba.z + bb.z) / 2, bcx = (bx0 + bx1) / 2, F2y = LEVEL.F2; // foot of the bed is on the -x side (headboard on +x)
+    // intercom stations, the front-door reader and the ground-floor presence sensors, resolved from the built scene
+    const nfc = scene.getObjectByName('NFC_LED'), lp = new THREE.Vector3(); if (nfc) nfc.getWorldPosition(lp); else lp.set(0.7, LEVEL.GF + 1.3, 9);
+    const callSeq = (answerAt, openAt) => () => { CINE.pxT.push(setTimeout(() => pxCallAnswer(), answerAt * 1000), setTimeout(() => pxCallOpen(), openAt * 1000)); };
+    const pane = (PXFX.panes.find(q => q.floor === 'GF') || PXFX.panes[0]), pn = pane ? pane.normal : { x: 0, z: 1 }, pd = pane ? pane.dir : { x: 1, z: 0 }, pp = pane ? pane.pos : { x: 0, y: 1.5, z: 0 };
+    const sensors = devices.filter(d => d.type === 'presence' && d.floor === 'GF').map(d => { const v = new THREE.Vector3(); d.root.getWorldPosition(v); return { d, v, hit: false }; }), sc = new THREE.Vector3();
+    sensors.forEach(q => sc.add(q.v)); if (sensors.length) sc.multiplyScalar(1 / sensors.length);
+    const walkTick = (k) => {   // the sensors fire one after another; each raises its room light
+        sensors.forEach((q, i) => { if (!q.hit && k >= 0.12 + i * (0.7 / Math.max(1, sensors.length))) { q.hit = true; triggerPresence(q.d); } });
+    };
     const room = (f, c, cap, dur, o = {}) => ({ n: cap[0], dur, fov: o.fov || [46, 40], cap, floor: o.floor || 'ALL', exp: o.exp || 1.0, scene: o.scene, on: o.on, lf: f, lc: c, ...cineAuto(f, c, o) });
     return [
         // chapter 1: the plot
@@ -57,6 +66,12 @@ function cineShots() {
           pos: [[-4, 11, 42], [-1, 8, 34], [5, 5.4, 27.5]], look: [[1, 4, 6], [1, 4.4, 6], [1, 4.6, 6]], on: () => { if (isGateOpen) toggleMainGate(); } },
         { n: 'Gate', dur: 9, fov: [34, 34], cap: ['Automated gate', 'Opens from the Loxone intercom, app or tablet'], exp: 1.0,
           pos: [[-1.5, 1.5, 30], [3.5, 1.7, 28.5], [8.5, 1.8, 21], [7, 2.0, 14]], look: [[6, 1.1, 24.3], [8, 1.3, 24.3], [5, 2.6, 12], [1, 4, 8]], on: () => { if (!isGateOpen) toggleMainGate(); } },
+        { n: 'Gate call', dur: 10, fov: [34, 34], cap: ['Gate video call', 'A visitor rings the gate station; answer on any tablet or phone, then open the gate'], scene: 'DUSK', floor: 'ALL', exp: 1.0,
+          on: () => { pxVisitor('Main Gate'); camAnim = null; callSeq(3, 6.5)(); },
+          pos: [[-3, 3.2, 31], [-1, 2.6, 29.5], [0.6, 2.0, 28]], look: [[2.3, 1.3, 24.5], [2.3, 1.3, 24.5], [2.3, 1.3, 24.5]] },
+        { n: 'Door call', dur: 9, fov: [34, 34], cap: ['Front door call', 'Video intercom and NFC reader: see who is there, then release the door'], floor: 'ALL', exp: 1.0,
+          on: () => { pxVisitor('Front Door'); camAnim = null; callSeq(3, 6)(); },
+          pos: [[lp.x + 3, LEVEL.GF + 2, lp.z + 6], [lp.x + 1.8, LEVEL.GF + 1.8, lp.z + 4.4], [lp.x + 0.9, LEVEL.GF + 1.6, lp.z + 3.4]], look: [[lp.x, LEVEL.GF + 1.2, lp.z + 0.6], [lp.x, LEVEL.GF + 1.2, lp.z + 0.8], [lp.x - 0.1, LEVEL.GF + 1.2, lp.z + 1]] },
         { n: 'Glass box', dur: 9, fov: [30, 30], cap: ['Double-height glass living space', 'DALI / DMX lighting follows the time of day'],
           pos: [[16, 2.2, 19], [10, 2.6, 25], [0, 3, 26], [-8, 3.4, 22]], look: [[1, 3.6, 6], [1, 3.8, 6], [1, 3.8, 6], [0, 3.8, 6]] },
         // pool lighting: one shot per Loxone pool mode (Swim, Relax, Party, Off), each from a different side of the deck
@@ -78,22 +93,26 @@ function cineShots() {
         { n: 'Garage', dur: 8, fov: [34, 34], cap: ['Garage door', 'Opens from the intercom, the app or a tablet; the bay light follows'], exp: 1.0,
           on: () => { pxGarage(true); },
           pos: [[19, 2.2, -4], [18, 2.0, -6.5], [16.5, 1.8, -8.2]], look: [[13.3, 1.3, -10.5], [13.3, 1.3, -10.5], [13.3, 1.3, -10.5]] },
+        { n: 'Glass break', dur: 9, fov: [34, 34], cap: ['Glass-break detection', 'A forced pane raises the alarm, marks the spot and shows the intruder'], scene: 'NIGHT', floor: 'ALL', exp: 1.05,
+          on: () => { pxGlassBreak(); camAnim = null; },
+          pos: [[pp.x + pn.x * 10 + pd.x * 3, pp.y + 2.6, pp.z + pn.z * 10 + pd.z * 3], [pp.x + pn.x * 7.5 + pd.x * 2, pp.y + 2.2, pp.z + pn.z * 7.5 + pd.z * 2], [pp.x + pn.x * 5.5 + pd.x, pp.y + 1.8, pp.z + pn.z * 5.5 + pd.z]], look: [[pp.x, pp.y - 0.2, pp.z], [pp.x, pp.y - 0.2, pp.z], [pp.x, pp.y - 0.2, pp.z]] },
         // chapter 2: ground floor (each room is lit in turn by its Loxone light zone: switch on, warm to cool white, dim)
         room('GF', [4.42, 7.96], ['Entrance', 'Video intercom, door tablet and welcome lighting'], 6, { scene: 'DUSK', prefer: -1.2, rmax: 3.2 }),
+        { n: 'Presence', dur: 12, fov: [42, 42], cap: ['Presence lighting', 'Each presence sensor that detects motion switches its room light on'], scene: 'NIGHT', floor: 'GF', exp: 1.05,
+          on: () => { setAllZonesOn(false); sensors.forEach(q => { q.hit = false; }); },
+          tick: walkTick,
+          pos: [[sc.x - 4, LEVEL.GF + 7, sc.z + 9], [sc.x - 2, LEVEL.GF + 6.5, sc.z + 7.5], [sc.x, LEVEL.GF + 6, sc.z + 6.5]], look: [[sc.x, LEVEL.GF + 0.8, sc.z], [sc.x, LEVEL.GF + 0.8, sc.z], [sc.x, LEVEL.GF + 0.8, sc.z]] },
         { n: 'Living', lf: 'GF', lc: [0.4, 5.0], exp: 0.9, dur: 10, fov: [48, 52], cap: ['Living & dining', 'Scenes, shades and multiroom audio in one touch'], floor: 'ALL',
           pos: [[0.5, 1.6, 14], [0.2, 1.6, 9.0], [0.3, 1.65, 6.3], [1.4, 1.6, 4.9]], look: [[0.5, 1.9, 6], [0.4, 1.7, 4], [table.x, 1.3, table.z], [table.x - 0.4, 1.2, table.z - 0.5]] },
         room('GF', [6.4, -0.45], ['Kitchen', 'Presence-controlled lighting and extraction'], 6, { rect: { x0: 4.66, x1: 8.2, z0: -2.32, z1: 1.8 }, cam: [7.85, 1.45] }),
         room('GF', [1.6, -3.9], ['Wet kitchen', 'Leak sensing at every sink and tap'], 6, { rect: { x0: 0.26, x1: 2.94, z0: -5.23, z1: -2.59 }, cam: [2.75, -2.75] }),
         room('GF', [-4.05, -3.1], ['Guest bedroom', 'Scenes, shades and a touch switch by the bed'], 7, { prefer: 0 }),
-        room('GF', [7.0, -3.9], ["Boy's quarters", 'A separate zone with its own lighting and air control'], 6, { prefer: Math.PI / 2 }),
         { n: 'Sauna', dur: 6, fov: [46, 40], cap: ['Sauna & guest WC', 'Humidity-aware ventilation and moisture protection'], floor: 'GF', exp: 1.0,
           pos: [[-6.9, 7.0, -1.3], [-6.8, 6.8, -1.9], [-6.76, 6.6, -2.4]], look: [[-6.76, 0.5, -3.1], [-6.76, 0.5, -3.0], [-6.76, 0.5, -3.0]] },
         // chapter 3: first floor
         room('F1', [0.66, 2.76], ['Family area', 'Multiroom audio, scenes and ambient lighting'], 7, { maxW: 3.3, maxD: 3.4 }),
         room('F1', [-5.87, -3.7], ['Male suite', 'Dimmable bedside lighting and shading'], 7, { prefer: 0 }),
-        room('F1', [0.67, -3.87], ['Female suite', 'Wake-up scenes, shades and ensuite lighting'], 7),
         room('F1', [4.95, -5.2], ['Female bathroom', 'Mirror lighting, extraction and leak protection'], 6, { prefer: Math.PI / 2, maxFov: 108 }),
-        room('F1', [5.41, -1.11], ["Kids' suite", 'Night-light scene, window sensors and presence control'], 6),
         room('F1', [7.41, -4.86], ['Ensuites & WCs', 'Motion lighting and humidity-controlled fans'], 5, { rmax: 2.2 }),
         // chapter 4: second floor
         { n: 'Master', lf: 'F2', lc: [bcx, bz], dur: 9, fov: [50, 50], cap: ['Master suite', 'Bed LED strip, Touch Pure Flex and control tablet'], floor: 'ALL', exp: 0.95,
@@ -113,9 +132,6 @@ function cineShots() {
         // chapter 6: energy and finale
         { n: 'Energy', dur: 8, fov: [32, 32], cap: ['Energy independence', 'Solar, battery, generator relay and load shedding'], floor: 'ALL', scene: 'DUSK',
           exp: 1.1, on: () => shedDoor(true), pos: [[SHED.cx - 3.2, 2.4, SHED.cz + 4.2], [SHED.cx - 1.3, 1.7, SHED.cz + 2.3], [SHED.cx - 0.25, 1.6, SHED.cz + 0.45]], look: [[SHED.cx, 1.3, SHED.cz], [SHED.cx + 0.6, 1.3, SHED.cz], [SHED.cx + 1.45, 1.3, SHED.cz - 0.55]] },
-        { n: 'Outage', dur: 9, fov: [34, 34], cap: ['Grid outage', 'The generator relay closes and the Miniserver sheds the heavy loads'], scene: 'NIGHT', floor: 'ALL', exp: 1.0,
-          on: () => { pxOutage(true); pxGenerator(); },
-          pos: [[22, 2.4, -6], [21, 2.0, -9], [20.5, 1.8, -10.6]], look: [[18.3, 1.0, -12.1], [18.3, 1.0, -12.1], [18.3, 1.0, -12.1]] },
         { n: 'Night', dur: 11, fov: [34, 28], cap: ['Plot 1 · Glenshire Hills', 'Premium package · The Intelligent Estate'], title: true, scene: 'NIGHT', floor: 'ALL', exp: 1.0,
           pos: [[13, 3.8, 31], [20, 9, 38], [30, 19, 46]], look: [[1, 4.6, 7], [1, 4.8, 7], [1, 4.6, 6]] }
     ].map(s => ({ ...s, posC: new THREE.CatmullRomCurve3(s.pos.map(cv3), false, 'centripetal'), lookC: new THREE.CatmullRomCurve3(s.look.map(cv3), false, 'centripetal') }));
@@ -124,7 +140,7 @@ function cineShots() {
 /* ---------------------------------------------------------------- overlay UI */
 function cineBuildUI() {
     const css = document.createElement('style');
-    css.textContent = `.cine-on #top-bar,.cine-on #left-panel,.cine-on #right-panel,.cine-on #site-footer,.cine-on #tooltip,.cine-on #xp-card{display:none!important}
+    css.textContent = `.cine-on #top-bar,.cine-on #left-panel,.cine-on #right-panel,.cine-on #site-footer,.cine-on #tooltip,.cine-on #xp-card,.cine-on #px-call,.cine-on #px-banner{display:none!important}
         #cine-wrap{position:fixed;inset:0;z-index:80;pointer-events:none;display:none}.cine-on #cine-wrap{display:block}
         .cine-bar{position:absolute;left:0;right:0;background:#000;transition:height 1.2s ease}
         #cine-vig{position:absolute;inset:0;background:radial-gradient(ellipse at center,rgba(0,0,0,0) 55%,rgba(0,0,0,.55) 100%)}
@@ -216,7 +232,7 @@ function cineSave() { if (!CINE.recBlob) return; const a = document.createElemen
 function cineStart(record) {
     if (CINE.active) return;
     if (typeof xp !== 'undefined' && xp.i >= 0) stopExperienceTour(); if (walk.active) toggleWalk(false); exitCCTV(); closeTablet();
-    CINE.shots = cineShots(); CINE.active = true; CINE.i = -1; CINE.barK = 0; CINE.fadeA = 0; CINE.capOn = false; CINE.caption = null;
+    CINE.pxT = []; CINE.shots = cineShots(); CINE.active = true; CINE.i = -1; CINE.barK = 0; CINE.fadeA = 0; CINE.capOn = false; CINE.caption = null;
     CINE.saved = { exp: renderer.toneMappingExposure, pos: camera.position.clone(), tgt: controls.target.clone(), fov: camera.fov, scene: currentScene, labels: roomLabelsOn, markers: markersOn, floor: currentFloor, filter: renderer.domElement.style.filter, plan: !!(planMeshes[0] && planMeshes[0].visible) };
     // the film shows the lighting and EV charging: switch those device types on (they start unticked) and remember everything to restore
     CINE.vt = { ...visibleTypes }; CINE.ev = { on: isEvCharging, mode: evChargeMode }; CINE.litZone = null;
@@ -234,7 +250,9 @@ function cineStart(record) {
     cineMusicStart(); if (record) setTimeout(cineRecStart, 150);
     setTimeout(() => cineGo(0), 900);
 }
-function cinePxReset() {   // estate demos (rain, garage, outage) are undone before every shot and when the film ends
+function cinePxReset() {
+    (CINE.pxT || []).forEach(clearTimeout); CINE.pxT = [];
+    try { if (PX.sec.call) pxCallEnd(); if (isAlarmActive || PX.sec.alert || PXFX.glass) { if (isAlarmActive) toggleHazardAlarm(); pxClearAlert(); } } catch (e) { }   // estate demos (rain, garage, outage) are undone before every shot and when the film ends
     try { if (PX.wx.rain) pxRain(false); if (PX.wx.wind !== 12) pxWind(12); if (PX.sec.garageOpen) pxGarage(false);
         if (PX.en.outage) pxOutage(false); PX.en.genManual = false; PX.en.gen = false; } catch (e) { }
 }
@@ -331,6 +349,7 @@ function cineTick(dt, t) {
     CINE.fadeA = parseFloat(getComputedStyle(px$('cine-fade')).opacity) || 0;
     const s = CINE.shots[CINE.i]; if (!s) return;
     if (s.video) cineVideoTick(s, dt);
+    if (s.tick) s.tick(Math.min(1, (CINE.t + dt) / s.dur), dt, t);
     CINE.t += dt; const k = Math.min(1, CINE.t / s.dur);
     if (s.zone) { const z = s.zone; // light show per room: on, off, cool white, then a few RGBW colour changes, settling on warm white
         let f = CINE_LIGHT_SEQ[0]; CINE_LIGHT_SEQ.forEach(q => { if (k >= q[0]) f = q; }); z.on = f[1]; z.level = f[2]; z.color = f[3]; z.autoUntil = 0; applyZone(z); }
